@@ -1,0 +1,119 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{multicol}
+\usepackage{tabularx}
+\setlength{\tabcolsep}{3pt}
+
+\newcommand{\twopaneltitles}[2]{%
+    \noindent
+    \begin{minipage}[t]{0.49\linewidth}
+        \centering\normalsize\bfseries #1
+    \end{minipage}\hfill%
+    \begin{minipage}[t]{0.49\linewidth}
+        \centering\normalsize\bfseries #2
+    \end{minipage}\par\vspace{2pt}%
+}
+
+\begin{document}
+
+\begingroup
+\centering
+{\footnotesize\scshape\color{black!70} Universidad de San Andrés \quad$\cdot$\quad Escuela de Ingeniería \quad$\cdot$\quad I308 --- Visión Artificial}\\[4pt]
+{\color{black!25}\rule{\linewidth}{0.6pt}}\\[10pt]
+{\fontsize{20}{24}\selectfont\bfseries\color{black}
+Reconstrucción 3D\\[2pt]
+por estéreo multivista\par}
+\vspace{6pt}
+{\normalsize\itshape\color{black!70} Trabajo Práctico II\par}
+\vspace{10pt}
+{\normalsize\bfseries Agustín Patruno Carranza \quad$\cdot$\quad Catalina Hirsch \quad$\cdot$\quad Mathias Kneipp\par}
+\vspace{2pt}
+{\footnotesize\color{black!60}\today\par}
+\vspace{4pt}
+{\color{black!25}\rule{\linewidth}{0.6pt}}
+\endgroup
+\vspace{10pt}
+
+\begin{abstract}
+\noindent
+
+\end{abstract}
+
+\begin{multicols}{2}
+
+\section{Introducción y Marco Teórico}
+% Introducir los conceptos fundamentales de forma clara y concisa.
+
+\subsection{Modelo de cámara pinhole y distorsión}
+% ¿Cuáles son los parámetros intrínsecos? ¿Por qué es necesario calibrar?
+
+\subsection{Calibración estéreo}
+% ¿Qué parámetros extrínsecos relativos se estiman y para qué sirven?
+% ¿Cómo se realiza esta estimación? ¿Qué es el error de reproyección?
+
+\subsection{Geometría epipolar y rectificación}
+% ¿Qué problema resuelve la rectificación? ¿Cómo facilita el cálculo de disparidad?
+
+\subsection{De disparidad a profundidad}
+% ¿Qué relación matemática hay entre disparidad y profundidad?
+
+\section{Metodología}
+% Describir brevemente el pipeline implementado, mencionando en cada etapa
+% las técnicas y parámetros utilizados.
+
+\subsection{Calibración y rectificación}
+% Herramienta utilizada (tool de la cátedra o funciones de OpenCV).
+
+\subsection{Disparidad y nube local}
+% Método elegido (SGBM, red neuronal, etc.) y parámetros ajustados.
+% Cómputo de la nube local con reprojectImageTo3D (matriz Q).
+
+\subsection{Pose global y transformación}
+% ¿Cómo estimaron la pose con solvePnP? ¿Qué representa el vector de Rodrigues?
+% ¿Qué cuenta hicieron para llevar la nube de puntos al sistema global?
+
+\subsection{Fusión y optimización en Open3D}
+% Pasos de optimización usados y parámetros elegidos justificados
+% (bounding box -> voxel_down_sample -> remoción de outliers).
+
+\subsection{Medición métrica}
+% ¿Cómo midieron el objeto? ¿Por qué es posible tener un resultado métrico
+% (y no el problema de reconstrucción salvo por una escala)?
+
+\section{Resultados y Discusión}
+
+\subsection{Resultados}
+% Evidencia visual y cuantitativa de cada etapa del pipeline:
+% - Calibración: parámetros obtenidos, error RMS, par original vs. rectificado.
+% - Disparidad: mapa de disparidad de un par representativo, nube local.
+% - Pose y marco global: poses de cámara superpuestas con el marco de referencia.
+% - Nube global y optimización: antes/después en cada paso, cantidad de puntos.
+% - Medición métrica: tamaño estimado en mm, método, error relativo si se conoce.
+
+\subsection{Discusión}
+% Análisis crítico: problemas encontrados en el pipeline, limitaciones del método
+% y posibles mejoras.
+
+\begin{thebibliography}{9}
+\footnotesize
+\bibitem{hartley} R. Hartley y A. Zisserman. \href{https://www.robots.ox.ac.uk/~vgg/hzbook/index.html}{Multiple View Geometry in Computer Vision}. 2.ª ed., Cambridge University Press, 2004.
+\bibitem{opencv} OpenCV. \href{https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html}{Camera Calibration and 3D Reconstruction}. Documentación oficial.
+\bibitem{open3d} Q.-Y. Zhou, J. Park y V. Koltun. \href{http://www.open3d.org/}{Open3D: A Modern Library for 3D Data Processing}. arXiv:1801.09847, 2018.
+\end{thebibliography}
+
+\end{multicols}
+\end{document}

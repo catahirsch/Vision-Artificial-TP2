@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Entornos virtuales y variables locales
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# LaTeX (se conservan los archivos .tex y los PDF finales)
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+*.log
+
+# Editores
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Metadatos de archivos comprimidos
+.DS_Store
+._*
+
+# Windows
+Thumbs.db
+Desktop.ini
