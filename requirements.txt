@@ -1,0 +1,18 @@
+# TP2 - Reconstruccion 3D. Python 3.10-3.13 (macOS Apple Silicon).
+# Instalar desde la raiz: python -m pip install -r requirements.txt
+
+# Calibracion, rectificacion, disparidad y deteccion ArUco/ChArUco.
+# contrib incluye los modulos principales: no agregar opencv-python.
+numpy==2.2.6
+opencv-contrib-python==4.13.0.92
+PyYAML==6.0.3
+
+# Procesamiento, visualizacion y exportacion de nubes de puntos.
+open3d==0.20.0
+matplotlib==3.10.6
+
+# Inferencia de los ejemplos CREStereo y HITNet (CPU).
+onnxruntime==1.23.2
+
+# Ejecucion de notebooks desde un editor con soporte Jupyter.
+ipykernel==6.30.1

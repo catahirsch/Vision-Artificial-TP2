@@ -27,8 +27,9 @@ calibration = Calibration(**{
 })
 
 
-left_image = cv2.imread("images/cat_left_rect.jpg")
-right_image = cv2.imread("images/cat_right_rect.jpg")
+images_dir = Path(__file__).resolve().parents[2] / "data" / "examples" / "stereodemo"
+left_image = cv2.imread(str(images_dir / "left_0.jpg"))
+right_image = cv2.imread(str(images_dir / "right_0.jpg"))
 
 pair = InputPair(left_image, right_image, calibration, "status?")
 config = Config(models_path=models_path)

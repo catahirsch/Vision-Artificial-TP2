@@ -2,6 +2,7 @@ import cv2
 import aruco
 import pickle
 import numpy as np
+from pathlib import Path
 
 def draw_line(img, pt1, pt2, color, thickness=3):
     pt1 = (np.round(pt1[0]).astype(int), np.round(pt1[1]).astype(int))
@@ -66,7 +67,8 @@ if __name__ == "__main__":
     left_calibration = stereo_calibration["left_K"], stereo_calibration["left_dist"]
 
     # read left capture
-    image = cv2.imread('./res/left_0.jpg')
+    images_dir = Path(__file__).resolve().parents[2] / "data" / "examples" / "charuco"
+    image = cv2.imread(str(images_dir / 'left_0.jpg'))
 
     cv2.imshow("original image", image)
     cv2.waitKey(0)

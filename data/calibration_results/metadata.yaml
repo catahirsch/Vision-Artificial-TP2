@@ -1,0 +1,86 @@
+schema_version: 1
+status: Resultados existentes preservados; calidad y escala metrica pendientes de
+  validacion.
+provenance:
+  tool: i308-calib
+  tool_version: 0.0.1
+  repository: https://github.com/udesa-vision/i308-calib.git
+  git_commit: e32a494338528770cab2e6230853356abe375813
+  local_tool_has_tracked_changes: false
+  original_results_directory: tp2-calib/data
+  calibration_command: calib-stereo -cfg cfg/stereo.yaml --checkerboard 9x6 --square-size 28
+  calibration_command_source: Historial local de zsh; correspondencia con los resultados guardados pendiente de confirmar.
+  calibration_date: null
+  generation_dependency_versions: null
+image_size_per_camera_px:
+  width: 1920
+  height: 1080
+calibration_images:
+  directory_from_project_root: data/calibration
+  available_stereo_pairs: 63
+  pairs_used_for_saved_calibration: null
+  correspondence_with_saved_results_confirmed: false
+checkerboard:
+  inner_corners_columns: 9
+  inner_corners_rows: 6
+  squares_columns: 10
+  squares_rows: 7
+  square_size_mm: 28
+  pattern_width_mm: 280
+  pattern_height_mm: 196
+  source: Parametros del comando recuperado del historial local de zsh.
+  note: Las dimensiones fisicas corresponden al patron de cuadrados, sin incluir margenes.
+quality:
+  stereo_reprojection_rms_px: null
+  rectification_visually_validated: false
+metric_scale:
+  expected_length_unit_in_tool: mm
+  length_unit_confirmed_for_saved_results: false
+  baseline_in_calibration_units: 57.683564136797926
+  note: T y la profundidad obtenida con Q usan las unidades del tamano de cuadrado
+    usado al calibrar. El comando recuperado especifica 28 mm; confirmar que genero
+    los resultados guardados y validar la escala antes de reportar medidas en mm.
+artifacts:
+  stereo_calibration.pkl:
+    original_path_from_project_root: tp2-calib/data/stereo_calibration.pkl
+    bytes: 923
+    sha256: c63f94acf7b55ea8516707054d5578144d78a4ae53cdd5f5e3191fa3d29ac2a3
+  stereo_maps.pkl:
+    original_path_from_project_root: tp2-calib/data/stereo_maps.pkl
+    bytes: 33178692
+    sha256: f254766813baa72cb9549e8ff7ab2be8f983346bed61a1b257662d226e57ac4f
+  capture_config.yaml:
+    original_path_from_project_root: tp2-calib/cfg/stereo.yaml
+    bytes: 337
+    sha256: 10eca0cb4f5506be964ee0a0d0197bfc6a5da2a3832994b3803ce0cd70cb01e1
+  calibration_tool_instructions.md:
+    original_path_from_project_root: calib-tool.md
+    bytes: 6506
+    sha256: 0b9ce8880cbb2e6170fb5fe7f1489fcb77c0d527764fec3cb55b9f6420ba0b78
+rectification_maps:
+  left_map_x:
+    shape:
+    - 1080
+    - 1920
+    dtype: float32
+  left_map_y:
+    shape:
+    - 1080
+    - 1920
+    dtype: float32
+  right_map_x:
+    shape:
+    - 1080
+    - 1920
+    dtype: float32
+  right_map_y:
+    shape:
+    - 1080
+    - 1920
+    dtype: float32
+pending:
+- Confirmar que los resultados guardados corresponden al comando recuperado con tablero 9x6 y cuadrados de 28 mm.
+- Recuperar o recalcular el error RMS de reproyeccion.
+- Confirmar que la calibracion corresponde a las capturas que se reconstruiran.
+- Validar visualmente la rectificacion.
+- Registrar fecha y versiones originales de las dependencias si se recuperan.

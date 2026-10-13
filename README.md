@@ -17,9 +17,11 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 
 ```
 .
-├── datasets/              # datasets provistos por la cátedra (calib/ + captures/)
-│   ├── stereo_budha_board    # 6 capturas, checkerboard
-│   └── stereo_budha_charuco  # 21 capturas en órbita 360°, ChArUco
+├── data/                  # fotografías y resultados de calibración
+│   ├── calibration/       # 63 pares del tablero de calibración
+│   ├── calibration_results/ # .pkl, matrices legibles y metadatos
+│   ├── raw/               # palacio (72 pares) y peluche unificado (70 pares)
+│   └── examples/          # imágenes de demostración de la cátedra
 ├── code_examples/         # código de referencia de la cátedra
 ├── src/                   # código fuente del pipeline (ver abajo)
 ├── report/                # informe (LaTeX + PDF)
@@ -47,6 +49,15 @@ pip install -r requirements.txt
 ```
 
 ## Uso
+
+Los resultados de calibración existentes están en
+[`data/calibration_results`](data/calibration_results), con los parámetros del
+tablero registrados en [`metadata.yaml`](data/calibration_results/metadata.yaml).
+El comando recuperado del historial de zsh indica un checkerboard de **9 × 6
+esquinas internas** (10 × 7 cuadrados), con cuadrados de **28 mm de lado**.
+El patrón mide **280 × 196 mm**, sin incluir márgenes. Antes de reportar medidas
+en milímetros, confirmar que ese comando generó los resultados guardados y
+validar la escala.
 
 > Completar a medida que se implementa cada etapa.
 
