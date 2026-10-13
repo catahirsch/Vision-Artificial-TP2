@@ -35,8 +35,8 @@
 {\footnotesize\scshape\color{black!70} Universidad de San Andrés \quad$\cdot$\quad Escuela de Ingeniería \quad$\cdot$\quad I308 --- Visión Artificial}\\[4pt]
 {\color{black!25}\rule{\linewidth}{0.6pt}}\\[10pt]
 {\fontsize{20}{24}\selectfont\bfseries\color{black}
-Reconstrucción 3D\\[2pt]
-por estéreo multivista\par}
+Reconstrucción 3D y estimación\\[2pt]
+métrica por estéreo multivista\par}
 \vspace{6pt}
 {\normalsize\itshape\color{black!70} Trabajo Práctico II\par}
 \vspace{10pt}
@@ -56,20 +56,97 @@ por estéreo multivista\par}
 \begin{multicols}{2}
 
 \section{Introducción y Marco Teórico}
-% Introducir los conceptos fundamentales de forma clara y concisa.
+El objetivo de este trabajo es reconstruir la nube de puntos 3D de un objeto a partir
+de un conjunto de imágenes tomadas desde distintos ángulos con una cámara estéreo, y
+estimar sus dimensiones reales en milímetros. Se utiliza un sistema estéreo porque
+permite recuperar la profundidad de los píxeles y porque reduce la búsqueda de
+correspondencias a una recta (la línea epipolar). El pipeline consta de: calibración
+del par estéreo (intrínsecos, distorsión y extrínsecos relativos $R$, $t$), rectificación
+de las imágenes para alinear las líneas epipolares, cálculo de disparidad para obtener
+una nube de puntos local por par, estimación de la pose global de cada cámara para
+fusionar todas las nubes en un marco común, y finalmente optimización de la nube y
+medición métrica del objeto.
 
 \subsection{Modelo de cámara pinhole y distorsión}
-% ¿Cuáles son los parámetros intrínsecos? ¿Por qué es necesario calibrar?
+El modelo pinhole describe cómo una cámara forma una imagen: todos los rayos de luz pasan por un
+único punto y se proyectan sobre el plano imagen. En esta proyección de perspectiva se pierde la
+profundidad, ya que un punto del plano puede provenir de infinitos puntos 3D sobre una recta. La
+proyección de un punto 3D se expresa como
+
+$$s\,\begin{bmatrix}u\\v\\1\end{bmatrix} = K\,[\,R \mid t\,]\begin{bmatrix}X\\Y\\Z\\1\end{bmatrix}$$
+
+donde $K$ es la matriz de parámetros intrínsecos (proyecta del sistema de la cámara al plano
+imagen) y $[R|t]$ son los extrínsecos, que describen la rotación y traslación de la cámara
+respecto del mundo. La matriz $K$ tiene la forma
+
+$$K=\begin{bmatrix}f_x & s & c_x\\0 & f_y & c_y\\0 & 0 & 1\end{bmatrix}$$
+
+Donde $f_x$ y $f_y$ es la distancia focal en píxeles, $c_x$ y $c_y$ es el punto principal (donde
+el eje óptico corta el plano imagen) y $s$ (skew) es el sesgo entre los ejes, que se asume nulo.
+
+El modelo pinhole ideal no contempla que las lentes reales deforman la imagen. Esto se corrige
+con los coeficientes de distorsión: la \emph{radial} ($k_1$, $k_2$, $k_3$) arquea las líneas
+rectas (efecto barril o cojín), notoria en lentes de cámara web como la de este trabajo, y la
+\emph{tangencial} ($p_1$, $p_2$), por desalineación entre lente y sensor.
+
+Tanto $K$ como los coeficientes de distorsión son desconocidos y propios de cada cámara. Sin
+ellos no se puede relacionar los píxeles con la geometría real ni obtener medidas en milímetros.
+Por eso es necesario calibrar: estimarlos a partir de un patrón de geometría conocida. Es el
+cimiento métrico del pipeline, ya que un error en esta etapa se propaga al resto.
 
 \subsection{Calibración estéreo}
 % ¿Qué parámetros extrínsecos relativos se estiman y para qué sirven?
 % ¿Cómo se realiza esta estimación? ¿Qué es el error de reproyección?
+Se estiman la rotación ($R$) y traslación ($t$) relativas entre las dos cámaras (de la derecha
+respecto de la izquierda). Definen la geometría del par y permiten rectificar y recuperar la
+profundidad: el módulo de $t$ es la línea base (\emph{baseline} $B$), que entra en $Z = f\,B/d$.
+
+Para estimarlos se toman pares de imágenes de un patrón (checkerboard/ChArUco) de geometría
+conocida vistos por ambas cámaras a la vez, se detectan sus esquinas y se resuelve una
+optimización (\texttt{stereoCalibrate}) que halla el $R$, $t$ consistente con todas las vistas
+(y afina intrínsecos y distorsión).
+
+La calidad se mide con el error de reproyección: se reproyectan los puntos 3D del patrón al plano
+imagen con los parámetros estimados y se mide, en píxeles, la distancia a las esquinas
+detectadas, reportada como raíz cuadrática media (RMS); cuanto más bajo, mejor.
+
+$$
+e_{\text{RMS}} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\left\lVert \mathbf{x}_i - \hat{\mathbf{x}}_i \right\rVert^2}
+$$
+
+donde $\mathbf{x}_i$ es la esquina detectada, $\hat{\mathbf{x}}_i$ su reproyección a partir del
+punto 3D conocido, y $N$ el total de puntos sobre todas las imágenes.
 
 \subsection{Geometría epipolar y rectificación}
 % ¿Qué problema resuelve la rectificación? ¿Cómo facilita el cálculo de disparidad?
+Dado un punto en la imagen izquierda, su correspondiente en la derecha está obligado a caer sobre
+una recta, la línea epipolar: el punto 3D está sobre el rayo que sale de la cámara izquierda, y
+ese rayo se proyecta como una recta en la derecha. Así, la búsqueda de correspondencias pasa de
+2D a 1D. Esta restricción la captura la matriz fundamental F (o la esencial E):
+$\mathbf{x}'^{T} F \mathbf{x} = 0$.
+
+En general esas líneas epipolares están inclinadas y a distintas alturas en cada imagen. La
+rectificación reproyecta (homografía) ambas imágenes a un par ideal con planos imagen coplanares,
+de modo que las líneas epipolares queden horizontales y alineadas en la misma fila.
+
+Tras rectificar, el correspondiente de un píxel está en la misma fila de la otra imagen, desplazado solo
+horizontalmente. Ese desplazamiento es la disparidad, $d = x_{\text{izq}} - x_{\text{der}}$. Así, el cálculo
+de disparidad se reduce a una búsqueda 1D a lo largo de la fila, mucho más rápida y robusta que buscar sobre
+rectas oblicuas distintas para cada píxel.
 
 \subsection{De disparidad a profundidad}
 % ¿Qué relación matemática hay entre disparidad y profundidad?
+En el par rectificado, la profundidad $Z$ de un punto se relaciona con su disparidad $d$ por
+triángulos semejantes mediante
+
+$$Z = \frac{f\,B}{d}$$
+
+donde $f$ es la distancia focal en píxeles y $B$ la línea base. La relación es inversa, por lo
+que un mismo error en $d$ afecta más a los puntos lejanos y el estéreo es más preciso de cerca.
+Como $B$ proviene de la calibración en milímetros, $Z$ queda en unidades métricas, sin la
+ambigüedad de escala de la reconstrucción monocular. Con la profundidad de cada píxel, la matriz
+de reproyección $Q$ retroproyecta cada píxel $(u,v)$ a un punto 3D $(X,Y,Z)$, formando la nube
+local.
 
 \section{Metodología}
 % Describir brevemente el pipeline implementado, mencionando en cada etapa
