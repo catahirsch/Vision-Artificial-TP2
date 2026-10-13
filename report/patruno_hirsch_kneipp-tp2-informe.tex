@@ -95,8 +95,7 @@ Por eso es necesario calibrar: estimarlos a partir de un patrón de geometría c
 cimiento métrico del pipeline, ya que un error en esta etapa se propaga al resto.
 
 \subsection{Calibración estéreo}
-% ¿Qué parámetros extrínsecos relativos se estiman y para qué sirven?
-% ¿Cómo se realiza esta estimación? ¿Qué es el error de reproyección?
+
 Se estiman la rotación ($R$) y traslación ($t$) relativas entre las dos cámaras (de la derecha
 respecto de la izquierda). Definen la geometría del par y permiten rectificar y recuperar la
 profundidad: el módulo de $t$ es la línea base (\emph{baseline} $B$), que entra en $Z = f\,B/d$.
@@ -118,7 +117,7 @@ donde $\mathbf{x}_i$ es la esquina detectada, $\hat{\mathbf{x}}_i$ su reproyecci
 punto 3D conocido, y $N$ el total de puntos sobre todas las imágenes.
 
 \subsection{Geometría epipolar y rectificación}
-% ¿Qué problema resuelve la rectificación? ¿Cómo facilita el cálculo de disparidad?
+
 Dado un punto en la imagen izquierda, su correspondiente en la derecha está obligado a caer sobre
 una recta, la línea epipolar: el punto 3D está sobre el rayo que sale de la cámara izquierda, y
 ese rayo se proyecta como una recta en la derecha. Así, la búsqueda de correspondencias pasa de
@@ -135,7 +134,7 @@ de disparidad se reduce a una búsqueda 1D a lo largo de la fila, mucho más rá
 rectas oblicuas distintas para cada píxel.
 
 \subsection{De disparidad a profundidad}
-% ¿Qué relación matemática hay entre disparidad y profundidad?
+
 En el par rectificado, la profundidad $Z$ de un punto se relaciona con su disparidad $d$ por
 triángulos semejantes mediante
 
@@ -151,6 +150,7 @@ local.
 \section{Metodología}
 % Describir brevemente el pipeline implementado, mencionando en cada etapa
 % las técnicas y parámetros utilizados.
+
 
 \subsection{Calibración y rectificación}
 % Herramienta utilizada (tool de la cátedra o funciones de OpenCV).
