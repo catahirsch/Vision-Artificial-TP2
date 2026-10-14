@@ -52,3 +52,8 @@ ENV/
 # Windows
 Thumbs.db
 Desktop.ini
+
+# Ignorar solo archivos generados pesados
+data/processed/
+*.ply
+*.pcd
