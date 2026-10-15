@@ -73,13 +73,17 @@ El modelo pinhole describe cómo una cámara forma una imagen: todos los rayos d
 profundidad, ya que un punto del plano puede provenir de infinitos puntos 3D sobre una recta. La
 proyección de un punto 3D se expresa como
 
-$$s\,\begin{bmatrix}u\\v\\1\end{bmatrix} = K\,[\,R \mid t\,]\begin{bmatrix}X\\Y\\Z\\1\end{bmatrix}$$
+\begin{equation}\label{eq:proyeccion}
+s\,\begin{bmatrix}u\\v\\1\end{bmatrix} = K\,[\,R \mid t\,]\begin{bmatrix}X\\Y\\Z\\1\end{bmatrix}
+\end{equation}
 
 donde $K$ es la matriz de parámetros intrínsecos (proyecta del sistema de la cámara al plano
 imagen) y $[R|t]$ son los extrínsecos, que describen la rotación y traslación de la cámara
 respecto del mundo. La matriz $K$ tiene la forma
 
-$$K=\begin{bmatrix}f_x & s & c_x\\0 & f_y & c_y\\0 & 0 & 1\end{bmatrix}$$
+\begin{equation}\label{eq:intrinseca}
+K=\begin{bmatrix}f_x & s & c_x\\0 & f_y & c_y\\0 & 0 & 1\end{bmatrix}
+\end{equation}
 
 Donde $f_x$ y $f_y$ es la distancia focal en píxeles, $c_x$ y $c_y$ es el punto principal (donde
 el eje óptico corta el plano imagen) y $s$ (skew) es el sesgo entre los ejes, que se asume nulo.
@@ -109,9 +113,9 @@ La calidad se mide con el error de reproyección: se reproyectan los puntos 3D d
 imagen con los parámetros estimados y se mide, en píxeles, la distancia a las esquinas
 detectadas, reportada como raíz cuadrática media (RMS); cuanto más bajo, mejor.
 
-$$
+\begin{equation}\label{eq:rms}
 e_{\text{RMS}} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\left\lVert \mathbf{x}_i - \hat{\mathbf{x}}_i \right\rVert^2}
-$$
+\end{equation}
 
 donde $\mathbf{x}_i$ es la esquina detectada, $\hat{\mathbf{x}}_i$ su reproyección a partir del
 punto 3D conocido, y $N$ el total de puntos sobre todas las imágenes.
@@ -122,14 +126,20 @@ Dado un punto en la imagen izquierda, su correspondiente en la derecha está obl
 una recta, la línea epipolar: el punto 3D está sobre el rayo que sale de la cámara izquierda, y
 ese rayo se proyecta como una recta en la derecha. Así, la búsqueda de correspondencias pasa de
 2D a 1D. Esta restricción la captura la matriz fundamental F (o la esencial E):
-$\mathbf{x}'^{T} F \mathbf{x} = 0$.
+\begin{equation}\label{eq:epipolar}
+\mathbf{x}'^{T} F \mathbf{x} = 0
+\end{equation}
 
 En general esas líneas epipolares están inclinadas y a distintas alturas en cada imagen. La
 rectificación reproyecta (homografía) ambas imágenes a un par ideal con planos imagen coplanares,
 de modo que las líneas epipolares queden horizontales y alineadas en la misma fila.
 
 Tras rectificar, el correspondiente de un píxel está en la misma fila de la otra imagen, desplazado solo
-horizontalmente. Ese desplazamiento es la disparidad, $d = x_{\text{izq}} - x_{\text{der}}$. Así, el cálculo
+horizontalmente. Ese desplazamiento es la disparidad,
+\begin{equation}\label{eq:disparidad}
+d = x_{\text{izq}} - x_{\text{der}}
+\end{equation}
+Así, el cálculo
 de disparidad se reduce a una búsqueda 1D a lo largo de la fila, mucho más rápida y robusta que buscar sobre
 rectas oblicuas distintas para cada píxel.
 
@@ -138,7 +148,9 @@ rectas oblicuas distintas para cada píxel.
 En el par rectificado, la profundidad $Z$ de un punto se relaciona con su disparidad $d$ por
 triángulos semejantes mediante
 
-$$Z = \frac{f\,B}{d}$$
+\begin{equation}\label{eq:profundidad}
+Z = \frac{f\,B}{d}
+\end{equation}
 
 donde $f$ es la distancia focal en píxeles y $B$ la línea base. La relación es inversa, por lo
 que un mismo error en $d$ afecta más a los puntos lejanos y el estéreo es más preciso de cerca.
@@ -148,16 +160,38 @@ de reproyección $Q$ retroproyecta cada píxel $(u,v)$ a un punto 3D $(X,Y,Z)$, 
 local.
 
 \section{Metodología}
-% Describir brevemente el pipeline implementado, mencionando en cada etapa
-% las técnicas y parámetros utilizados.
 
+El pipeline implementado parte de la calibración y rectificación del par estéreo, calcula la
+disparidad de cada par y la retroproyecta a una nube de puntos local, estima la pose global de cada
+cámara respecto de un marco de referencia común para fusionar todas las nubes, y finalmente optimiza
+la nube resultante y mide el objeto. A continuación se describe cada etapa con las técnicas y
+parámetros utilizados.
 
 \subsection{Calibración y rectificación}
-% Herramienta utilizada (tool de la cátedra o funciones de OpenCV).
+
+La calibración se realizó con la herramienta \texttt{calib-stereo} de la cátedra, a partir de 63
+pares de un \emph{checkerboard} de $9\times6$ esquinas internas y cuadrados de 28~mm, capturados
+desde distintos ángulos. Mediante \texttt{calibrateCamera} y \texttt{stereoCalibrate} se estiman los
+intrínsecos y la distorsión de cada cámara y los extrínsecos relativos ($R$, $t$); el tamaño físico
+del cuadrado fija la escala métrica. Los resultados se exportan a archivos \texttt{.pkl} que el resto
+del pipeline consume sin recalibrar.
+
+Con esos parámetros se calcularon los mapas de rectificación (\texttt{cv.stereoRectify}, que devuelve
+además la matriz $Q$ para pasar de disparidad a 3D, e \texttt{cv.initUndistortRectifyMap}) y se
+aplicaron a cada par con \texttt{cv.remap}. La alineación se verificó visualmente con líneas horizontales 
+sobre un par rectificado.
 
 \subsection{Disparidad y nube local}
-% Método elegido (SGBM, red neuronal, etc.) y parámetros ajustados.
-% Cómputo de la nube local con reprojectImageTo3D (matriz Q).
+
+Sobre cada par rectificado se calculó la disparidad con \texttt{StereoSGBM}, elegido por su robustez
+en zonas de poca textura. Los parámetros se ajustaron observando el mapa resultante
+(\texttt{blockSize}$=11$, \texttt{numDisparities}$=240$, penalizaciones $P_1$, $P_2$ y los filtros
+\texttt{uniquenessRatio}, \texttt{speckleWindowSize} y \texttt{speckleRange}), dividiendo la salida
+por $16$ para obtener la disparidad real en píxeles. Luego se retroproyectó a una nube de puntos con
+\texttt{cv.reprojectImageTo3D} y la matriz $Q$, que aplica la relación de la ecuación
+\eqref{eq:profundidad} y devuelve coordenadas $(X,Y,Z)$ en milímetros en el sistema de la cámara
+izquierda. Cada punto se coloreó con la imagen rectificada y se filtraron los píxeles sin
+correspondencia válida y los de profundidad fuera de rango.
 
 \subsection{Pose global y transformación}
 % ¿Cómo estimaron la pose con solvePnP? ¿Qué representa el vector de Rodrigues?
