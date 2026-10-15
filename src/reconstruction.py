@@ -22,7 +22,7 @@ import cv2 as cv
 import open3d as o3d
 
 
-def indice_par(path: str) -> int:
+def get_pair_index(path: str) -> int:
     """
     Índice numérico de una imagen ``left_<n>.jpg`` / ``right_<n>.jpg``.
 
@@ -38,13 +38,13 @@ def indice_par(path: str) -> int:
     return int(os.path.basename(path).split("_")[1].split(".")[0])
 
 
-def construir_nube_local(
+def build_local_point_cloud(
     left_path: str,
     disparity: np.ndarray,
     Q: np.ndarray,
-    map1x: np.ndarray,
-    map1y: np.ndarray,
-    min_disp: int = 0,
+    left_rectification_map_x: np.ndarray,
+    left_rectification_map_y: np.ndarray,
+    min_disparity: int = 0,
     z_min: float = 100.0,
     z_max: float = 2000.0,
 ) -> o3d.geometry.PointCloud:
@@ -67,22 +67,28 @@ def construir_nube_local(
         o3d.geometry.PointCloud: Nube de puntos coloreada en el sistema de la
         cámara izquierda rectificada.
     """
-    rectL_color = cv.remap(cv.imread(left_path, cv.IMREAD_COLOR), map1x, map1y, cv.INTER_LINEAR)
+    left_image = cv.imread(left_path, cv.IMREAD_COLOR)
+    rectified_left_color = cv.remap(
+        left_image,
+        left_rectification_map_x,
+        left_rectification_map_y,
+        cv.INTER_LINEAR,
+    )
 
-    pts_3d = cv.reprojectImageTo3D(disparity, Q)  # (H, W, 3) en mm
-    colors = cv.cvtColor(rectL_color, cv.COLOR_BGR2RGB).astype(np.float32) / 255.0
+    points_3d = cv.reprojectImageTo3D(disparity, Q)  # (H, W, 3) en mm
+    colors = cv.cvtColor(rectified_left_color, cv.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
     # Filtrado: disparidad válida, coordenadas finitas y profundidad en rango
-    mask = (disparity > min_disp) & np.isfinite(pts_3d).all(axis=2)
-    mask &= (pts_3d[:, :, 2] > z_min) & (pts_3d[:, :, 2] < z_max)
+    mask = (disparity > min_disparity) & np.isfinite(points_3d).all(axis=2)
+    mask &= (points_3d[:, :, 2] > z_min) & (points_3d[:, :, 2] < z_max)
 
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pts_3d[mask])
-    pcd.colors = o3d.utility.Vector3dVector(colors[mask])
-    return pcd
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(points_3d[mask])
+    point_cloud.colors = o3d.utility.Vector3dVector(colors[mask])
+    return point_cloud
 
 
-def crear_detector_charuco(
+def create_charuco_detector(
     squares_x: int = 9,
     squares_y: int = 13,
     square_mm: float = 42.0,
@@ -100,16 +106,18 @@ def crear_detector_charuco(
         ``cv.aruco.CharucoDetector``).
     """
     aruco_dict = cv.aruco.getPredefinedDictionary(dict_id)
-    board = cv.aruco.CharucoBoard((squares_x, squares_y), square_mm, marker_mm, aruco_dict)
+    board = cv.aruco.CharucoBoard(
+        (squares_x, squares_y), square_mm, marker_mm, aruco_dict
+    )
     detector = cv.aruco.CharucoDetector(board)
     return board, detector
 
 
-def estimar_pose_global(
+def estimate_global_pose(
     rect_left_gray: np.ndarray,
     detector,
     board,
-    K_rect: np.ndarray,
+    rectified_intrinsic: np.ndarray,
     dist: np.ndarray | None = None,
     min_corners: int = 6,
 ):
@@ -140,16 +148,16 @@ def estimar_pose_global(
         return None
 
     obj_pts, img_pts = board.matchImagePoints(ch_corners, ch_ids)
-    ok, rvec, tvec = cv.solvePnP(obj_pts, img_pts, K_rect, dist)
+    ok, rvec, tvec = cv.solvePnP(obj_pts, img_pts, rectified_intrinsic, dist)
     if not ok:
         return None
 
     # solvePnP da mundo -> cámara; se invierte para llevar la nube de cámara a mundo.
-    R_cam, _ = cv.Rodrigues(rvec)
-    R_inv = R_cam.T
-    t_inv = (-R_inv @ tvec).flatten()
+    camera_rotation, _ = cv.Rodrigues(rvec)
+    inverse_rotation = camera_rotation.T
+    inverse_translation = (-inverse_rotation @ tvec).flatten()
 
-    T_global = np.eye(4)
-    T_global[:3, :3] = R_inv
-    T_global[:3, 3] = t_inv
-    return T_global
+    camera_to_world_transform = np.eye(4)
+    camera_to_world_transform[:3, :3] = inverse_rotation
+    camera_to_world_transform[:3, 3] = inverse_translation
+    return camera_to_world_transform

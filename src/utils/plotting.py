@@ -23,23 +23,23 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 
 
-def _guardar(fig, guardar: str | None) -> None:
+def _save_figure(figure, save_path: str | None) -> None:
     """Guarda ``fig`` en ``guardar`` creando el directorio si no existe."""
-    if guardar:
-        carpeta = os.path.dirname(guardar)
-        if carpeta:
-            os.makedirs(carpeta, exist_ok=True)
-        fig.savefig(guardar, dpi=120, bbox_inches="tight")
+    if save_path:
+        directory = os.path.dirname(save_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        figure.savefig(save_path, dpi=120, bbox_inches="tight")
 
 
-def mostrar_par_rectificado(
+def show_rectified_pair(
     img_left: np.ndarray,
     img_right: np.ndarray,
     rect_left: np.ndarray,
     rect_right: np.ndarray,
     image_size: tuple[int, int],
-    n_lineas: int = 10,
-    guardar: str | None = None,
+    num_lines: int = 10,
+    save_path: str | None = None,
 ):
     """
     Muestra el par original vs. rectificado en una grilla 2x2.
@@ -58,29 +58,29 @@ def mostrar_par_rectificado(
     Returns:
         matplotlib.figure.Figure: La figura generada.
     """
-    fig, axs = plt.subplots(2, 2, figsize=(12, 8))
-    axs[0, 0].imshow(cv.cvtColor(img_left, cv.COLOR_BGR2RGB));   axs[0, 0].set_title("Izquierda Original")
-    axs[0, 1].imshow(cv.cvtColor(img_right, cv.COLOR_BGR2RGB));  axs[0, 1].set_title("Derecha Original")
-    axs[1, 0].imshow(cv.cvtColor(rect_left, cv.COLOR_BGR2RGB));  axs[1, 0].set_title("Izquierda Rectificada")
-    axs[1, 1].imshow(cv.cvtColor(rect_right, cv.COLOR_BGR2RGB)); axs[1, 1].set_title("Derecha Rectificada")
+    figure, axes = plt.subplots(2, 2, figsize=(12, 8))
+    axes[0, 0].imshow(cv.cvtColor(img_left, cv.COLOR_BGR2RGB));   axes[0, 0].set_title("Izquierda Original")
+    axes[0, 1].imshow(cv.cvtColor(img_right, cv.COLOR_BGR2RGB));  axes[0, 1].set_title("Derecha Original")
+    axes[1, 0].imshow(cv.cvtColor(rect_left, cv.COLOR_BGR2RGB));  axes[1, 0].set_title("Izquierda Rectificada")
+    axes[1, 1].imshow(cv.cvtColor(rect_right, cv.COLOR_BGR2RGB)); axes[1, 1].set_title("Derecha Rectificada")
 
-    for y in np.linspace(0, image_size[1], n_lineas)[1:-1]:
-        axs[1, 0].axhline(y, color="r", linestyle="--", alpha=0.6)
-        axs[1, 1].axhline(y, color="r", linestyle="--", alpha=0.6)
+    for y in np.linspace(0, image_size[1], num_lines)[1:-1]:
+        axes[1, 0].axhline(y, color="r", linestyle="--", alpha=0.6)
+        axes[1, 1].axhline(y, color="r", linestyle="--", alpha=0.6)
 
-    for ax in axs.ravel():
-        ax.set_xticks([]); ax.set_yticks([])
+    for axis in axes.ravel():
+        axis.set_xticks([]); axis.set_yticks([])
 
-    fig.tight_layout()
-    _guardar(fig, guardar)
-    return fig
+    figure.tight_layout()
+    _save_figure(figure, save_path)
+    return figure
 
 
-def mostrar_disparidad(
+def show_disparity(
     disparity: np.ndarray,
-    titulo: str = "Mapa de disparidad",
+    title: str = "Mapa de disparidad",
     cmap: str = "magma",
-    guardar: str | None = None,
+    save_path: str | None = None,
 ):
     """
     Muestra un mapa de disparidad con barra de color.
@@ -94,16 +94,16 @@ def mostrar_disparidad(
     Returns:
         matplotlib.figure.Figure: La figura generada.
     """
-    fig = plt.figure(figsize=(10, 5))
+    figure = plt.figure(figsize=(10, 5))
     plt.imshow(disparity, cmap=cmap)
-    plt.title(titulo)
+    plt.title(title)
     plt.colorbar(label="disparidad (px)")
     plt.axis("off")
-    _guardar(fig, guardar)
-    return fig
+    _save_figure(figure, save_path)
+    return figure
 
 
-def visualizar_nubes(geometrias: list, titulo: str = "Open3D"):
+def show_geometries(geometries: list, title: str = "Open3D"):
     """
     Abre una ventana interactiva de Open3D con las geometrías dadas.
 
@@ -111,12 +111,12 @@ def visualizar_nubes(geometrias: list, titulo: str = "Open3D"):
         geometrias (list): Lista de geometrías de Open3D (nubes, mallas, ejes).
         titulo (str): Título de la ventana.
     """
-    o3d.visualization.draw_geometries(geometrias, window_name=titulo)
+    o3d.visualization.draw_geometries(geometries, window_name=title)
 
 
-def guardar_captura_o3d(
-    geometrias: list,
-    guardar: str,
+def save_open3d_screenshot(
+    geometries: list,
+    save_path: str,
     width: int = 1280,
     height: int = 960,
 ) -> None:
@@ -131,15 +131,15 @@ def guardar_captura_o3d(
         guardar (str): Ruta de salida del PNG.
         width, height (int): Resolución de la captura.
     """
-    carpeta = os.path.dirname(guardar)
-    if carpeta:
-        os.makedirs(carpeta, exist_ok=True)
+    directory = os.path.dirname(save_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(visible=False, width=width, height=height)
-    for g in geometrias:
-        vis.add_geometry(g)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.capture_screen_image(guardar, do_render=True)
-    vis.destroy_window()
+    visualizer = o3d.visualization.Visualizer()
+    visualizer.create_window(visible=False, width=width, height=height)
+    for g in geometries:
+        visualizer.add_geometry(g)
+    visualizer.poll_events()
+    visualizer.update_renderer()
+    visualizer.capture_screen_image(save_path, do_render=True)
+    visualizer.destroy_window()
