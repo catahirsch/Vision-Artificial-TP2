@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import yaml
 
-from .utils.utils import indexed_images
+from .utils.utils import imread_unicode, indexed_images
 
 
 def get_image_points(
@@ -56,8 +56,8 @@ def get_image_points(
     for index, (img_left_path, img_right_path) in enumerate(
         zip(images_left, images_right)
     ):
-        img_left = cv2.imread(str(img_left_path), cv2.IMREAD_GRAYSCALE)
-        img_right = cv2.imread(str(img_right_path), cv2.IMREAD_GRAYSCALE)
+        img_left = imread_unicode(img_left_path, cv2.IMREAD_GRAYSCALE)
+        img_right = imread_unicode(img_right_path, cv2.IMREAD_GRAYSCALE)
         if img_left is None or img_right is None:
             raise OSError(
                 f"Could not read stereo pair: {img_left_path}, {img_right_path}"
@@ -357,7 +357,7 @@ def load_calibration_data(
     used_pair_ids = [pair_ids[index] for index in accepted_indices]
     used_ids_set = set(used_pair_ids)
     rejected_pair_ids = [index for index in pair_ids if index not in used_ids_set]
-    image_size = cv2.imread(str(images_left[0]), cv2.IMREAD_GRAYSCALE).shape[::-1]
+    image_size = imread_unicode(images_left[0], cv2.IMREAD_GRAYSCALE).shape[::-1]
 
     return {
         "directory": images_dir,

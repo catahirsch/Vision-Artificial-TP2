@@ -22,6 +22,8 @@ import numpy as np
 import cv2 as cv
 import open3d as o3d
 
+from .utils.utils import imread_unicode, imwrite_unicode
+
 
 def get_pair_index(path: str) -> int:
     """
@@ -68,7 +70,7 @@ def build_local_point_cloud(
         o3d.geometry.PointCloud: Nube de puntos coloreada en el sistema de la
         cámara izquierda rectificada.
     """
-    left_image = cv.imread(left_path, cv.IMREAD_COLOR)
+    left_image = imread_unicode(left_path, cv.IMREAD_COLOR)
     rectified_left_color = cv.remap(
         left_image,
         left_rectification_map_x,
@@ -225,8 +227,8 @@ def compute_disparities(
     PNG files are normalized previews. Pairs with unreadable images are skipped.
     """
     for img_left_path, img_right_path in zip(images_left, images_right):
-        left_image_gray = cv.imread(img_left_path, cv.IMREAD_GRAYSCALE)
-        right_image_gray = cv.imread(img_right_path, cv.IMREAD_GRAYSCALE)
+        left_image_gray = imread_unicode(img_left_path, cv.IMREAD_GRAYSCALE)
+        right_image_gray = imread_unicode(img_right_path, cv.IMREAD_GRAYSCALE)
         if left_image_gray is None or right_image_gray is None:
             continue
 
@@ -261,7 +263,7 @@ def compute_disparities(
         disparity_preview = cv.normalize(
             disparity, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U
         )
-        cv.imwrite(
+        imwrite_unicode(
             os.path.join(disparity_output_dir, disparity_filename_stem + ".png"),
             disparity_preview,
         )
@@ -314,7 +316,7 @@ def merge_global_point_cloud(
         disparity = np.load(disparity_file_path)
 
         # Pose de esta cámara respecto del mundo (tablero ChArUco)
-        left_image_gray = cv.imread(left_path, cv.IMREAD_GRAYSCALE)
+        left_image_gray = imread_unicode(left_path, cv.IMREAD_GRAYSCALE)
         rectified_left_gray = cv.remap(
             left_image_gray,
             left_rectification_map_x,
