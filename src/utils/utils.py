@@ -32,3 +32,12 @@ def get_image_at_index(dataset_name: str, index: int) -> tuple[np.ndarray, np.nd
         raise OSError(f"Could not load image: {right_path}")
 
     return img_left, img_right
+
+
+def indexed_images(directory: str | Path, side: str) -> dict[int, Path]:
+    """Index image paths by capture number, rejecting duplicate indices."""
+    paths = list(Path(directory).glob(f"{side}_*.jpg"))
+    indexed = {int(path.stem.rsplit("_", 1)[1]): path for path in paths}
+    if len(indexed) != len(paths):
+        raise ValueError(f"Hay índices de captura repetidos para {side}.")
+    return indexed

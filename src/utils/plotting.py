@@ -22,6 +22,9 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 import open3d as o3d
 
+from .utils import get_image_at_index
+from ..calibration_rectification import rectify_image_pair
+
 
 def _save_figure(figure, save_path: str | None) -> None:
     """Guarda ``fig`` en ``guardar`` creando el directorio si no existe."""
@@ -59,21 +62,25 @@ def show_rectified_pair(
         matplotlib.figure.Figure: La figura generada.
     """
     figure, axes = plt.subplots(2, 2, figsize=(12, 8))
-    axes[0, 0].imshow(cv.cvtColor(img_left, cv.COLOR_BGR2RGB));   axes[0, 0].set_title("Izquierda Original")
-    axes[0, 1].imshow(cv.cvtColor(img_right, cv.COLOR_BGR2RGB));  axes[0, 1].set_title("Derecha Original")
-    axes[1, 0].imshow(cv.cvtColor(rect_left, cv.COLOR_BGR2RGB));  axes[1, 0].set_title("Izquierda Rectificada")
-    axes[1, 1].imshow(cv.cvtColor(rect_right, cv.COLOR_BGR2RGB)); axes[1, 1].set_title("Derecha Rectificada")
+    axes[0, 0].imshow(cv.cvtColor(img_left, cv.COLOR_BGR2RGB))
+    axes[0, 0].set_title("Izquierda Original")
+    axes[0, 1].imshow(cv.cvtColor(img_right, cv.COLOR_BGR2RGB))
+    axes[0, 1].set_title("Derecha Original")
+    axes[1, 0].imshow(cv.cvtColor(rect_left, cv.COLOR_BGR2RGB))
+    axes[1, 0].set_title("Izquierda Rectificada")
+    axes[1, 1].imshow(cv.cvtColor(rect_right, cv.COLOR_BGR2RGB))
+    axes[1, 1].set_title("Derecha Rectificada")
 
     for y in np.linspace(0, image_size[1], num_lines)[1:-1]:
         axes[1, 0].axhline(y, color="r", linestyle="--", alpha=0.6)
         axes[1, 1].axhline(y, color="r", linestyle="--", alpha=0.6)
 
     for axis in axes.ravel():
-        axis.set_xticks([]); axis.set_yticks([])
+        axis.set_xticks([])
+        axis.set_yticks([])
 
     figure.tight_layout()
     _save_figure(figure, save_path)
-    return figure
 
 
 def show_disparity(
@@ -100,7 +107,7 @@ def show_disparity(
     plt.colorbar(label="disparidad (px)")
     plt.axis("off")
     _save_figure(figure, save_path)
-    return figure
+    plt.show()
 
 
 def show_geometries(geometries: list, title: str = "Open3D"):
@@ -143,3 +150,58 @@ def save_open3d_screenshot(
     visualizer.update_renderer()
     visualizer.capture_screen_image(save_path, do_render=True)
     visualizer.destroy_window()
+
+
+def show_calibration_errors(diagnostics: dict, save_path: str | None = None):
+    """Plot, optionally save and display reprojection and vertical errors per capture."""
+    rows = diagnostics["rows"]
+    used_pair_ids = [row["pair_id"] for row in rows]
+    per_view_rms = np.array(
+        [
+            [row["left_reprojection_rms_px"], row["right_reprojection_rms_px"]]
+            for row in rows
+        ]
+    )
+    diagnostics = rows
+    figure, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+    axes[0].plot(used_pair_ids, per_view_rms[:, 0], ".-", label="Izquierda")
+    axes[0].plot(
+        used_pair_ids, per_view_rms[:, 1], ".-", label="Derecha desde pose izquierda"
+    )
+    axes[0].set_ylabel("RMS reproyección (px)")
+    axes[0].legend()
+    axes[1].plot(
+        used_pair_ids, [row["vertical_alignment_rms_px"] for row in diagnostics], ".-"
+    )
+    axes[1].set_ylabel("RMS vertical (px)")
+    axes[1].set_xlabel("Índice del par de calibración")
+    for axis in axes:
+        axis.grid(alpha=0.3)
+    figure.tight_layout()
+    _save_figure(figure, save_path)
+    plt.show()
+
+
+def show_rectification_example(
+    dataset_name: str,
+    index: int,
+    maps: dict,
+    image_size: tuple[int, int],
+    save_path: str | None = None,
+):
+    """Load a dataset pair, rectify it and display/save the comparison figure."""
+    img_left, img_right = get_image_at_index(dataset_name=dataset_name, index=index)
+    if img_left.shape[1::-1] != image_size or img_right.shape[1::-1] != image_size:
+        raise ValueError(
+            "La resolución del ejemplo difiere de la resolución de calibración."
+        )
+    rect_left, rect_right = rectify_image_pair(img_left, img_right, maps)
+    figure = show_rectified_pair(
+        img_left,
+        img_right,
+        rect_left,
+        rect_right,
+        image_size,
+        save_path=save_path,
+    )
+    plt.show()

@@ -1,10 +1,17 @@
-"""Helpers for detecting calibration points and measuring reprojection error."""
+"""Stereo calibration, rectification and reprojection diagnostics for notebook 01."""
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+import csv
+import hashlib
+import pickle
+from datetime import datetime, timezone
 
 import cv2
 import numpy as np
+import yaml
+
+from .utils.utils import indexed_images
 
 
 def get_image_points(
@@ -13,11 +20,12 @@ def get_image_points(
     cols: int,
     images_right: Sequence[str | Path],
     images_left: Sequence[str | Path],
-) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
-    """Detect and refine checkerboard corners in pairs seen by both cameras.
+) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[int]]:
+    """
+    Detect and refine checkerboard corners in pairs seen by both cameras.
 
     Args:
-        sq_size: Checkerboard square side length in millimeters.
+        square_size: Checkerboard square side length in millimeters.
         rows: Number of inner checkerboard corners per column.
         cols: Number of inner checkerboard corners per row.
         images_right: Right image paths, ordered to match ``images_left``.
@@ -25,19 +33,41 @@ def get_image_points(
 
     Returns:
         Object points and the corresponding detected image points for the left
-        and right cameras, respectively. A pair is included only when both
-        images contain a detected checkerboard.
+        and right cameras, and indices of accepted pairs in the input lists.
+        A pair is included only when both images contain a detected checkerboard.
     """
+    if not images_left or len(images_left) != len(images_right):
+        raise ValueError("Provide non-empty left/right lists with matching lengths.")
+    if square_size <= 0 or rows < 2 or cols < 2:
+        raise ValueError("The square size must be positive and the grid at least 2x2.")
     object_points_for_pair = np.zeros((rows * cols, 3), np.float32)
     object_points_for_pair[:, :2] = (
         np.mgrid[0:cols, 0:rows].T.reshape(-1, 2) * square_size
     )
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    object_points, image_points_left, image_points_right = [], [], []
-    for img_left_path, img_right_path in zip(images_left, images_right):
+    object_points, image_points_left, image_points_right, accepted_indices = (
+        [],
+        [],
+        [],
+        [],
+    )
+    expected_shape = None
+    for index, (img_left_path, img_right_path) in enumerate(
+        zip(images_left, images_right)
+    ):
         img_left = cv2.imread(str(img_left_path), cv2.IMREAD_GRAYSCALE)
         img_right = cv2.imread(str(img_right_path), cv2.IMREAD_GRAYSCALE)
+        if img_left is None or img_right is None:
+            raise OSError(
+                f"Could not read stereo pair: {img_left_path}, {img_right_path}"
+            )
+        if expected_shape is None:
+            expected_shape = img_left.shape
+        if img_left.shape != expected_shape or img_right.shape != expected_shape:
+            raise ValueError(
+                f"Image size differs in pair: {img_left_path}, {img_right_path}"
+            )
         found_left, corners_left = cv2.findChessboardCorners(
             img_left, (cols, rows), None
         )
@@ -45,6 +75,7 @@ def get_image_points(
             img_right, (cols, rows), None
         )
         if found_left and found_right:
+            accepted_indices.append(index)
             object_points.append(object_points_for_pair)
             image_points_left.append(
                 cv2.cornerSubPix(img_left, corners_left, (11, 11), (-1, -1), criteria)
@@ -53,7 +84,7 @@ def get_image_points(
                 cv2.cornerSubPix(img_right, corners_right, (11, 11), (-1, -1), criteria)
             )
 
-    return object_points, image_points_left, image_points_right
+    return object_points, image_points_left, image_points_right, accepted_indices
 
 
 def calibrate(
@@ -61,28 +92,70 @@ def calibrate(
     image_points_left: Sequence[np.ndarray],
     image_points_right: Sequence[np.ndarray],
     image_size: tuple[int, int],
-) -> tuple[float, float]:
-    """Calibrate each camera independently and return its RMS error in pixels.
+) -> tuple[dict[str, np.ndarray | tuple[int, int]], dict[str, float]]:
+    """
+    Calibrate both cameras, then estimate their relative rotation and translation.
+
+    Intrinsics and distortion are kept fixed during stereo calibration, so the
+    monocular RMS values describe the same intrinsics returned to the notebook.
 
     Args:
-        objpoints: Checkerboard 3D points for each accepted image pair.
-        imgpoints_left: Detected checkerboard corners in left images.
-        imgpoints_right: Detected checkerboard corners in right images.
+        object_points: Checkerboard 3D points for each accepted image pair.
+        image_points_left: Detected checkerboard corners in left images.
+        image_points_right: Detected checkerboard corners in right images.
         image_size: Image size as ``(width, height)``.
 
     Returns:
-        The monocular calibration RMS values for the left and right cameras.
+        Calibration in the stereo_calibration.pkl schema, and the left, right
+        and stereo calibration RMS values in pixels.
     """
-    rms_left, *_ = cv2.calibrateCamera(
+    if len(object_points) < 3:
+        raise ValueError(
+            "At least three detected stereo views are required to calibrate."
+        )
+    if not (len(object_points) == len(image_points_left) == len(image_points_right)):
+        raise ValueError("Object and image point lists must have matching lengths.")
+
+    rms_left, K1, D1, _, _ = cv2.calibrateCamera(
         object_points, image_points_left, image_size, None, None
     )
-    rms_right, *_ = cv2.calibrateCamera(
+    rms_right, K2, D2, _, _ = cv2.calibrateCamera(
         object_points, image_points_right, image_size, None, None
     )
-    return rms_left, rms_right
+    rms_stereo, K1, D1, K2, D2, R, t, E, F = cv2.stereoCalibrate(
+        object_points,
+        image_points_left,
+        image_points_right,
+        K1,
+        D1,
+        K2,
+        D2,
+        image_size,
+        flags=cv2.CALIB_FIX_INTRINSIC,
+        criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6),
+    )
+    calibration = {
+        "left_K": K1,
+        "right_K": K2,
+        "left_dist": D1,
+        "right_dist": D2,
+        "R": R,
+        "T": t,
+        "E": E,
+        "F": F,
+        "image_size": image_size,
+    }
+    errors = {
+        "left": float(rms_left),
+        "right": float(rms_right),
+        "stereo": float(rms_stereo),
+    }
+    if not all(np.isfinite(value).all() for value in calibration.values()):
+        raise RuntimeError("Calibration returned non-finite parameters.")
+    return calibration, errors
 
 
-def rms_reprojection_error(
+def stereo_reprojection_errors(
     object_points: Sequence[np.ndarray],
     image_points_left: Sequence[np.ndarray],
     image_points_right: Sequence[np.ndarray],
@@ -92,8 +165,9 @@ def rms_reprojection_error(
     D2: np.ndarray,
     R: np.ndarray,
     t: np.ndarray,
-) -> float:
-    """Compute stereo reprojection RMS in pixels using saved calibration data.
+) -> np.ndarray:
+    """
+    Validate fixed parameters and return per-view RMS for each camera (N x 2).
 
     Estimate the checkerboard pose in the left camera, transform it to the
     right camera using ``R`` and ``t``, then compare projected points with the
@@ -111,13 +185,21 @@ def rms_reprojection_error(
         t: Translation from the left camera coordinate system to the right.
 
     Returns:
-        Root mean square reprojection error in pixels across both cameras.
+        Left and right RMS errors per view. The board pose is fitted to the left
+        image only; this diagnostic differs from stereoCalibrate's joint RMS.
     """
-    squared_error, point_count = 0.0, 0
+    if not object_points or not (
+        len(object_points) == len(image_points_left) == len(image_points_right)
+    ):
+        raise ValueError("Provide non-empty object/image point lists of equal length.")
+    errors = []
+    t = np.asarray(t).reshape(3, 1)
     for object_points_for_pair, points_left, points_right in zip(
         object_points, image_points_left, image_points_right
     ):
-        _, rvec, tvec = cv2.solvePnP(object_points_for_pair, points_left, K1, D1)
+        ok, rvec, tvec = cv2.solvePnP(object_points_for_pair, points_left, K1, D1)
+        if not ok:
+            raise RuntimeError("Could not estimate a checkerboard pose for validation.")
         projected_points_left, _ = cv2.projectPoints(
             object_points_for_pair, rvec, tvec, K1, D1
         )
@@ -129,10 +211,33 @@ def rms_reprojection_error(
         )
         diff_left = projected_points_left.reshape(-1, 2) - points_left.reshape(-1, 2)
         diff_right = projected_points_right.reshape(-1, 2) - points_right.reshape(-1, 2)
-        squared_error += float((diff_left**2).sum() + (diff_right**2).sum())
-        point_count += 2 * len(object_points_for_pair)
+        errors.append(
+            [
+                np.sqrt(np.mean(np.sum(diff_left**2, axis=1))),
+                np.sqrt(np.mean(np.sum(diff_right**2, axis=1))),
+            ]
+        )
 
-    return np.sqrt(squared_error / point_count)
+    return np.asarray(errors)
+
+
+def rms_reprojection_error(
+    object_points: Sequence[np.ndarray],
+    image_points_left: Sequence[np.ndarray],
+    image_points_right: Sequence[np.ndarray],
+    K1: np.ndarray,
+    D1: np.ndarray,
+    K2: np.ndarray,
+    D2: np.ndarray,
+    R: np.ndarray,
+    t: np.ndarray,
+) -> float:
+    """Weighted RMS of stereo_reprojection_errors; distinct from calibration RMS."""
+    errors = stereo_reprojection_errors(
+        object_points, image_points_left, image_points_right, K1, D1, K2, D2, R, t
+    )
+    point_counts = np.asarray([len(points) for points in object_points])
+    return float(np.sqrt(np.average(np.mean(errors**2, axis=1), weights=point_counts)))
 
 
 def rectify(
@@ -143,6 +248,7 @@ def rectify(
     image_size: tuple[int, int],
     R: np.ndarray,
     t: np.ndarray,
+    alpha: float = 0.0,
 ) -> dict[str, np.ndarray | tuple[int, int, int, int]]:
     """Compute stereo rectification matrices and image remapping coordinates.
 
@@ -154,6 +260,7 @@ def rectify(
         image_size: Image size as ``(width, height)``.
         R: Rotation from the left camera coordinate system to the right.
         t: Translation from the left camera coordinate system to the right.
+        alpha: Rectification scaling. Zero crops invalid borders; one keeps all pixels.
 
     Returns:
         A dictionary matching the ``stereo_maps.pkl`` format: ``left_map_x``,
@@ -163,7 +270,9 @@ def rectify(
         disparity to 3D; ``validRoi1`` and ``validRoi2`` are valid image regions
         as ``(x, y, width, height)``.
     """
-    R1, R2, P1, P2, Q, roi1, roi2 = cv2.stereoRectify(K1, D1, K2, D2, image_size, R, t)
+    R1, R2, P1, P2, Q, roi1, roi2 = cv2.stereoRectify(
+        K1, D1, K2, D2, image_size, R, t, alpha=alpha
+    )
     left_rectification_map_x, left_rectification_map_y = cv2.initUndistortRectifyMap(
         K1, D1, R1, P1, image_size, cv2.CV_32FC1
     )
@@ -216,3 +325,290 @@ def rectify_image_pair(
         cv2.INTER_LINEAR,
     )
     return rect_left, rect_right
+
+
+def load_calibration_data(
+    images_dir: str | Path, square_size: float, rows: int, cols: int
+) -> dict:
+    """Pair images by index and detect the checkerboard, retaining capture IDs."""
+    images_dir = Path(images_dir)
+    left_by_index = indexed_images(images_dir, "left")
+    right_by_index = indexed_images(images_dir, "right")
+    if not left_by_index:
+        raise FileNotFoundError(f"No hay imágenes en {images_dir}")
+    if left_by_index.keys() != right_by_index.keys():
+        raise ValueError(
+            f"Pares incompletos. Sin derecha: {sorted(left_by_index.keys() - right_by_index.keys())}; "
+            f"sin izquierda: {sorted(right_by_index.keys() - left_by_index.keys())}"
+        )
+
+    pair_ids = sorted(left_by_index)
+    images_left = [left_by_index[index] for index in pair_ids]
+    images_right = [right_by_index[index] for index in pair_ids]
+    object_points, image_points_left, image_points_right, accepted_indices = (
+        get_image_points(
+            square_size=square_size,
+            rows=rows,
+            cols=cols,
+            images_left=images_left,
+            images_right=images_right,
+        )
+    )
+    used_pair_ids = [pair_ids[index] for index in accepted_indices]
+    used_ids_set = set(used_pair_ids)
+    rejected_pair_ids = [index for index in pair_ids if index not in used_ids_set]
+    image_size = cv2.imread(str(images_left[0]), cv2.IMREAD_GRAYSCALE).shape[::-1]
+
+    return {
+        "directory": images_dir,
+        "pair_ids": pair_ids,
+        "images_left": images_left,
+        "images_right": images_right,
+        "object_points": object_points,
+        "image_points_left": image_points_left,
+        "image_points_right": image_points_right,
+        "image_size": image_size,
+        "used_pair_ids": used_pair_ids,
+        "rejected_pair_ids": rejected_pair_ids,
+    }
+
+
+def evaluate_calibration(
+    calib: Mapping, maps: Mapping, calibration_data: Mapping
+) -> dict:
+    """Compute reprojection and rectified vertical errors for each accepted capture."""
+    K1, D1 = calib["left_K"], calib["left_dist"]
+    K2, D2 = calib["right_K"], calib["right_dist"]
+    R, t = calib["R"], calib["T"]
+    object_points = calibration_data["object_points"]
+    image_points_left = calibration_data["image_points_left"]
+    image_points_right = calibration_data["image_points_right"]
+    used_pair_ids = calibration_data["used_pair_ids"]
+    per_view_rms = stereo_reprojection_errors(
+        object_points, image_points_left, image_points_right, K1, D1, K2, D2, R, t
+    )
+    vertical_errors = []
+    diagnostics = []
+    for index, points_left, points_right, errors in zip(
+        used_pair_ids, image_points_left, image_points_right, per_view_rms
+    ):
+        rectified_points_left = cv2.undistortPoints(
+            points_left, K1, D1, R=maps["R1"], P=maps["P1"]
+        ).reshape(-1, 2)
+        rectified_points_right = cv2.undistortPoints(
+            points_right, K2, D2, R=maps["R2"], P=maps["P2"]
+        ).reshape(-1, 2)
+        dy = rectified_points_left[:, 1] - rectified_points_right[:, 1]
+        vertical_errors.append(dy)
+        diagnostics.append(
+            {
+                "pair_id": index,
+                "left_reprojection_rms_px": float(errors[0]),
+                "right_reprojection_rms_px": float(errors[1]),
+                "vertical_alignment_rms_px": float(np.sqrt(np.mean(dy**2))),
+            }
+        )
+
+    point_counts = np.array([len(points) for points in object_points])
+    validation_rms = float(
+        np.sqrt(np.average(np.mean(per_view_rms**2, axis=1), weights=point_counts))
+    )
+    all_vertical_errors = np.concatenate(vertical_errors)
+    vertical_rms = float(np.sqrt(np.mean(all_vertical_errors**2)))
+    return {
+        "rows": diagnostics,
+        "validation_rms": validation_rms,
+        "vertical_rms": vertical_rms,
+    }
+
+
+def save_calibration_results(
+    output_dir: str | Path,
+    calib: Mapping,
+    maps: Mapping,
+    calibration_rms: Mapping,
+    calibration_data: Mapping,
+    diagnostics: Mapping,
+    *,
+    root_dir: str | Path,
+    rows: int,
+    cols: int,
+    square_size_mm: float,
+    rectification_alpha: float,
+) -> dict:
+    """Save calibration, maps, per-view CSV and provenance in the notebook 02 schema."""
+    output_dir = Path(output_dir)
+    root_dir = Path(root_dir)
+    images_dir = calibration_data["directory"]
+    pair_ids = calibration_data["pair_ids"]
+    used_pair_ids = calibration_data["used_pair_ids"]
+    rejected_pair_ids = calibration_data["rejected_pair_ids"]
+    image_size = calib["image_size"]
+    t = calib["T"]
+    validation_rms = diagnostics["validation_rms"]
+    vertical_rms = diagnostics["vertical_rms"]
+    diagnostics = diagnostics["rows"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for filename, results in [
+        ("stereo_calibration.pkl", calib),
+        ("stereo_maps.pkl", maps),
+    ]:
+        with (output_dir / filename).open("wb") as stream:
+            pickle.dump(results, stream, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with (output_dir / "reprojection_errors.csv").open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(diagnostics[0]))
+        writer.writeheader()
+        writer.writerows(diagnostics)
+
+    metadata = {
+        "schema_version": 1,
+        "status": "Calibración generada en notebook 01; revisar calidad y validar escala física.",
+        "provenance": {
+            "tool": "OpenCV desde notebooks/01_calibration.ipynb",
+            "calibration_date": datetime.now(timezone.utc).isoformat(),
+            "generation_dependency_versions": {
+                "opencv": cv2.__version__,
+                "numpy": np.__version__,
+            },
+            "methods": [
+                "calibrateCamera (cada cámara)",
+                "stereoCalibrate (CALIB_FIX_INTRINSIC)",
+            ],
+        },
+        "image_size_per_camera_px": {
+            "width": int(image_size[0]),
+            "height": int(image_size[1]),
+        },
+        "calibration_images": {
+            "directory_from_project_root": str(images_dir.relative_to(root_dir)),
+            "available_stereo_pairs": len(pair_ids),
+            "pairs_used_for_saved_calibration": len(used_pair_ids),
+            "used_pair_ids": used_pair_ids,
+            "rejected_pair_ids": rejected_pair_ids,
+            "correspondence_with_saved_results_confirmed": True,
+        },
+        "checkerboard": {
+            "inner_corners_columns": cols,
+            "inner_corners_rows": rows,
+            "squares_columns": cols + 1,
+            "squares_rows": rows + 1,
+            "square_size_mm": square_size_mm,
+            "pattern_width_mm": (cols + 1) * square_size_mm,
+            "pattern_height_mm": (rows + 1) * square_size_mm,
+            "source": "Configuración de notebooks/01_calibration.ipynb",
+        },
+        "quality": {
+            "left_monocular_calibration_rms_px": calibration_rms["left"],
+            "right_monocular_calibration_rms_px": calibration_rms["right"],
+            "stereo_reprojection_rms_px": calibration_rms["stereo"],
+            "stereo_validation_left_pose_rms_px": validation_rms,
+            "rectified_vertical_alignment_rms_px": vertical_rms,
+        },
+        "metric_scale": {
+            "length_unit": "mm según square_size_mm",
+            "physical_square_size_confirmed": False,
+            "baseline_in_calibration_units": float(np.linalg.norm(t)),
+            "note": "Confirmar los 28 mm del tablero impreso y validar una distancia conocida antes de medir el objeto.",
+        },
+        "rectification": {"alpha": rectification_alpha},
+        "artifacts": {},
+    }
+    for filename in [
+        "stereo_calibration.pkl",
+        "stereo_maps.pkl",
+        "reprojection_errors.csv",
+    ]:
+        artifact = output_dir / filename
+        metadata["artifacts"][filename] = {
+            "bytes": artifact.stat().st_size,
+            "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+        }
+    with (output_dir / "metadata.yaml").open("w", encoding="utf-8") as stream:
+        yaml.safe_dump(metadata, stream, allow_unicode=True, sort_keys=False)
+
+    return metadata
+
+
+def calibrate_and_evaluate(
+    calibration_data: Mapping,
+    image_size: tuple[int, int],
+    alpha: float,
+    tau: float,
+    max_iter: int,
+) -> dict:
+    """Calibrate repeatedly, rejecting stereo views with reprojection RMS > tau.
+
+    ``tau`` is a positive threshold in pixels, applied to each camera's per-view
+    reprojection RMS. A pair is retained only if both errors are finite and at
+    most ``tau``. Vertical alignment is reported but does not control rejection.
+    ``max_iter`` limits the number of calibrations, including the first one.
+
+    Returns:
+        A dictionary with ``calib``, ``calibration_rms``, ``maps``, ``diagnostics``
+        and ``filtered_data``. Stop when every retained pair meets the threshold,
+        the iteration budget is exhausted, or rejection would leave fewer than
+        three views, returning the last evaluated calibration.
+        The returned data and diagnostics always describe that same calibration.
+        Input data is not modified; original image paths and available pair IDs
+        remain in ``filtered_data``, with updated used/rejected IDs and points.
+    """
+    point_keys = ("object_points", "image_points_left", "image_points_right")
+
+    filtered_data = dict(calibration_data)
+    for key in (*point_keys, "used_pair_ids", "rejected_pair_ids"):
+        filtered_data[key] = list(calibration_data[key])
+
+    ready = False
+    for _ in range(max_iter):
+        calib, calibration_rms = calibrate(
+            filtered_data["object_points"],
+            filtered_data["image_points_left"],
+            filtered_data["image_points_right"],
+            image_size,
+        )
+
+        maps = rectify(
+            K1=calib["left_K"],
+            K2=calib["right_K"],
+            D1=calib["left_dist"],
+            D2=calib["right_dist"],
+            image_size=image_size,
+            R=calib["R"],
+            t=calib["T"],
+            alpha=alpha,
+        )
+        diagnostics = evaluate_calibration(calib, maps, filtered_data)
+        keep_indices = [
+            index
+            for index, row in enumerate(diagnostics["rows"])
+            if all(
+                row[key] <= tau
+                for key in (
+                    "left_reprojection_rms_px",
+                    "right_reprojection_rms_px",
+                )
+            )
+        ]
+        ready = len(keep_indices) == len(filtered_data["used_pair_ids"])
+
+        if ready: break
+
+        filtered_data["rejected_pair_ids"] = sorted(
+            filtered_data["rejected_pair_ids"]
+            + [
+                pair_id
+                for index, pair_id in enumerate(filtered_data["used_pair_ids"])
+                if index not in keep_indices
+            ]
+        )
+        for key in (*point_keys, "used_pair_ids"):
+            filtered_data[key] = [filtered_data[key][index] for index in keep_indices]
+
+    return {
+        "calib": calib,
+        "calibration_rms": calibration_rms,
+        "maps": maps,
+        "diagnostics": diagnostics,
+        "filtered_data": filtered_data,
+    }
