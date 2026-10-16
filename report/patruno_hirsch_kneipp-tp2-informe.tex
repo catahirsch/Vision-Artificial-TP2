@@ -70,23 +70,44 @@ medición métrica del objeto.
 \subsection{Modelo de cámara pinhole y distorsión}
 El modelo pinhole describe cómo una cámara forma una imagen: todos los rayos de luz pasan por un
 único punto y se proyectan sobre el plano imagen. En esta proyección de perspectiva se pierde la
-profundidad, ya que un punto del plano puede provenir de infinitos puntos 3D sobre una recta. La
-proyección de un punto 3D se expresa como
-
+profundidad, ya que un punto del plano puede provenir de infinitos puntos 3D sobre una recta.
+La proyección de un punto tridimensional sobre la imagen se expresa como
 \begin{equation}\label{eq:proyeccion}
-s\,\begin{bmatrix}u\\v\\1\end{bmatrix} = K\,[\,R \mid t\,]\begin{bmatrix}X\\Y\\Z\\1\end{bmatrix}
+\lambda
+\begin{bmatrix}
+u\\v\\1
+\end{bmatrix}
+=
+K
+\begin{bmatrix}
+R & \mathbf{t}
+\end{bmatrix}
+\begin{bmatrix}
+X\\Y\\Z\\1
+\end{bmatrix},
 \end{equation}
+donde $\lambda$ es un factor de escala proyectivo, $K$ es la matriz de
+parámetros intrínsecos, y $R$ y $\mathbf{t}$ representan la rotación y
+la traslación que transforman las coordenadas del sistema de referencia
+del mundo al sistema de referencia de la cámara.
 
-donde $K$ es la matriz de parámetros intrínsecos (proyecta del sistema de la cámara al plano
-imagen) y $[R|t]$ son los extrínsecos, que describen la rotación y traslación de la cámara
-respecto del mundo. La matriz $K$ tiene la forma
+La matriz $K$ tiene la forma
 
 \begin{equation}\label{eq:intrinseca}
-K=\begin{bmatrix}f_x & s & c_x\\0 & f_y & c_y\\0 & 0 & 1\end{bmatrix}
+K=
+\begin{bmatrix}
+f_x & \gamma & c_x\\
+0 & f_y & c_y\\
+0 & 0 & 1
+\end{bmatrix}.
 \end{equation}
 
-Donde $f_x$ y $f_y$ es la distancia focal en píxeles, $c_x$ y $c_y$ es el punto principal (donde
-el eje óptico corta el plano imagen) y $s$ (skew) es el sesgo entre los ejes, que se asume nulo.
+Aquí, $f_x$ y $f_y$ son las distancias focales expresadas en píxeles
+en las direcciones horizontal y vertical, respectivamente; $c_x$ y
+$c_y$ son las coordenadas del punto principal, donde el eje óptico
+intersecta el plano imagen; y $\gamma$ representa el parámetro de
+sesgo (*skew*) entre los ejes de la imagen, que habitualmente se
+asume nulo.
 
 El modelo pinhole ideal no contempla que las lentes reales deforman la imagen. Esto se corrige
 con los coeficientes de distorsión: la \emph{radial} ($k_1$, $k_2$, $k_3$) arquea las líneas
@@ -182,28 +203,76 @@ aplicaron a cada par con \texttt{cv.remap}. La alineación se verificó visualme
 sobre un par rectificado.
 
 \subsection{Disparidad y nube local}
+Para cada par de imágenes estéreo, se aplicaron los mapas de rectificación para alinear ambas cámaras y 
+facilitar la búsqueda de correspondencias sobre las mismas filas. Sobre las imágenes rectificadas en escala 
+de grises se calculó la disparidad mediante \texttt{StereoSGBM}, utilizando \texttt{blockSize}$=11$, 
+\texttt{numDisparities}$=240$, $P_1=8\cdot11^2$ y $P_2=32\cdot11^2$, junto con \texttt{uniquenessRatio}$=5$, 
+\texttt{speckleWindowSize}$=200$ y \texttt{speckleRange}$=2$. Para reducir correspondencias erróneas, se verificó 
+la consistencia entre las disparidades izquierda-derecha y derecha-izquierda, con una tolerancia de $1.5$ píxeles. 
+También se aplicó el filtro WLS (\textit{Weighted Least Squares}) para suavizar el mapa de disparidad preservando 
+las discontinuidades de profundidad.
 
-Sobre cada par rectificado se calculó la disparidad con \texttt{StereoSGBM}, elegido por su robustez
-en zonas de poca textura. Los parámetros se ajustaron observando el mapa resultante
-(\texttt{blockSize}$=11$, \texttt{numDisparities}$=240$, penalizaciones $P_1$, $P_2$ y los filtros
-\texttt{uniquenessRatio}, \texttt{speckleWindowSize} y \texttt{speckleRange}), dividiendo la salida
-por $16$ para obtener la disparidad real en píxeles. Luego se retroproyectó a una nube de puntos con
-\texttt{cv.reprojectImageTo3D} y la matriz $Q$, que aplica la relación de la ecuación
-\eqref{eq:profundidad} y devuelve coordenadas $(X,Y,Z)$ en milímetros en el sistema de la cámara
-izquierda. Cada punto se coloreó con la imagen rectificada y se filtraron los píxeles sin
-correspondencia válida y los de profundidad fuera de rango.
+Mediante \texttt{cv.reprojectImageTo3D} y la matriz $Q$ obtenida durante la calibración estéreo, las disparidades 
+se reproyectaron al espacio tridimensional para recuperar las coordenadas $(X,Y,Z)$ en el sistema de referencia de 
+la cámara izquierda rectificada. Para construir la nube local, se asignó a cada punto el color correspondiente de 
+la imagen izquierda rectificada. Finalmente, se conservaron los puntos con disparidad superior al mínimo configurado, 
+coordenadas finitas y profundidad dentro del intervalo $100<Z<2000$ mm.
 
 \subsection{Pose global y transformación}
-% ¿Cómo estimaron la pose con solvePnP? ¿Qué representa el vector de Rodrigues?
-% ¿Qué cuenta hicieron para llevar la nube de puntos al sistema global?
+Para expresar las nubes locales en un sistema de referencia común, se estimó la pose de la cámara izquierda respecto 
+del tablero ChArUco. Se detectaron sus esquinas en cada imagen izquierda rectificada y, mediante \texttt{board.matchImagePoints}, 
+se obtuvieron las correspondencias entre sus coordenadas en píxeles y sus posiciones tridimensionales conocidas. 
+La estimación se realizó con \texttt{cv.solvePnP}, utilizando la matriz intrínseca rectificada, distorsión nula y el método 
+\texttt{SOLVEPNP\_SQPNP}. Se exigieron al menos seis esquinas válidas para aceptar la estimación.
+
+La función devuelve un vector de rotación $\mathbf{r}$ y un vector de traslación $\mathbf{t}$, que describen la 
+transformación del sistema de coordenadas del mundo al de la cámara. El vector de Rodrigues se convirtió en una matriz 
+de rotación $R$ mediante \texttt{cv.Rodrigues}. La transformación estimada cumple:
+\[
+\mathbf{p}_c=R\mathbf{p}_w+\mathbf{t},
+\]
+donde $\mathbf{p}_w$ y $\mathbf{p}_c$ representan un mismo punto en coordenadas de mundo y de cámara, respectivamente.
+
+Como las nubes locales están expresadas en coordenadas de cámara, se invirtió esta transformación para llevarlas al 
+sistema global. Utilizando $R^{-1}=R^T$, se obtuvo:
+\[
+R_{cw}=R^T,\qquad \mathbf{t}_{cw}=-R^T\mathbf{t}.
+\]
+Ambos componentes se combinaron en la matriz homogénea:
+\[
+T_{cw}=
+\begin{bmatrix}
+R^T & -R^T\mathbf{t}\\
+\mathbf{0}^T & 1
+\end{bmatrix}.
+\]
+Esta matriz permitió transformar cada nube local al sistema global para su posterior fusión. Los pares 
+cuya imagen no pudo leerse o cuya detección no alcanzó el mínimo de esquinas requerido se descartaron.
 
 \subsection{Fusión y optimización en Open3D}
-% Pasos de optimización usados y parámetros elegidos justificados
-% (bounding box -> voxel_down_sample -> remoción de outliers).
+Las nubes locales transformadas se fusionaron mediante Open3D. Para controlar el costo computacional y la 
+cantidad de puntos, se aplicó \texttt{voxel\_down\_sample} con un tamaño de vóxel de $2$ mm a cada nube local 
+y a la nube acumulada después de cada par procesado (\texttt{merge\_every}$=1$).
+
+Como postprocesamiento de la nube global del Palacio, se delimitó manualmente el objeto mediante una caja 
+alineada con los ejes (\textit{Axis-Aligned Bounding Box}, AABB), con límites $\mathbf{b}_{\min}=(130,90,-140)$ mm y 
+$\mathbf{b}_{\max}=(220,470,0)$ mm. Estos límites se definieron a partir de la inspección de la nube global. 
+Sobre la región seleccionada se aplicó una nueva reducción por vóxeles de $1.5$ mm y se eliminaron valores atípicos 
+mediante \texttt{remove\_statistical\_outlier}, utilizando \texttt{nb\_neighbors}$=20$ y \texttt{std\_ratio}$=1.5$. 
+Se registró la cantidad de puntos después de cada operación y se calcularon las dimensiones de la nube resultante 
+mediante una AABB y una caja envolvente orientada (\textit{Oriented Bounding Box}, OBB).
 
 \subsection{Medición métrica}
-% ¿Cómo midieron el objeto? ¿Por qué es posible tener un resultado métrico
-% (y no el problema de reconstrucción salvo por una escala)?
+Las dimensiones del objeto se estimaron a partir de las extensiones de las cajas AABB y OBB calculadas sobre la nube final. 
+La AABB mide las dimensiones respecto de los ejes globales, mientras que la OBB permite considerar la orientación de la nube 
+para obtener una estimación complementaria del tamaño del objeto.
+
+La reconstrucción permite obtener medidas métricas porque la matriz de reproyección $Q$ utiliza los parámetros de la 
+calibración estéreo, incluida la separación entre las cámaras, para recuperar coordenadas tridimensionales a escala física. 
+Por su parte, la pose global se estima a partir de las dimensiones conocidas del tablero ChArUco, configurado con cuadrados de 
+$42$ mm de lado. Para que las nubes locales y las poses sean compatibles, las unidades utilizadas en ambas calibraciones deben 
+ser consistentes. Las dimensiones obtenidas se interpretan como estimaciones del tamaño del objeto y su precisión depende de la 
+calibración, la calidad de las disparidades, la estimación de las poses y los filtros aplicados.
 
 \section{Resultados y Discusión}
 
