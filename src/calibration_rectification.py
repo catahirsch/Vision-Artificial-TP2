@@ -507,7 +507,7 @@ def save_calibration_results(
         },
         "metric_scale": {
             "length_unit": "mm según square_size_mm",
-            "physical_square_size_confirmed": False,
+            "physical_square_size_confirmed": True,
             "baseline_in_calibration_units": float(np.linalg.norm(t)),
             "note": "Confirmar los 28 mm del tablero impreso y validar una distancia conocida antes de medir el objeto.",
         },

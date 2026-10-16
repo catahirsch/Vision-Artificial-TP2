@@ -203,6 +203,7 @@ def create_stereo_matcher(
     )
 
 
+
 def compute_disparities(
     images_left: Sequence[str],
     images_right: Sequence[str],
@@ -212,62 +213,174 @@ def compute_disparities(
     right_rectification_map_x: np.ndarray,
     right_rectification_map_y: np.ndarray,
     disparity_output_dir: str,
+    use_wls: bool = True,
+    lr_max_diff: float = 1.5,
+    min_confidence: float = 0.0,
 ) -> None:
-    """Rectify image pairs and save their disparities using the notebook's loop.
+    """
+    Calcula disparidades, filtra con WLS opcional y aplica consistencia
+    izquierda-derecha. Guarda disparidades float32 en píxeles.
 
     Args:
-        images_left: Left image paths, ordered to match ``images_right``.
-        images_right: Corresponding right image paths.
-        stereo: Matcher returned by ``create_stereo_matcher``.
-        left_rectification_map_x, left_rectification_map_y: Left rectification maps.
-        right_rectification_map_x, right_rectification_map_y: Right rectification maps.
-        disparity_output_dir: Existing directory for NPY disparities and PNG previews.
-
-    NPY files contain real float32 disparities in pixels for reconstruction.
-    PNG files are normalized previews. Pairs with unreadable images are skipped.
+        images_left, images_right: Pares correspondientes y en el mismo orden.
+        stereo: Matcher SGBM para la imagen izquierda.
+        *_rectification_map_*: Mapas de rectificación de ambas cámaras.
+        disparity_output_dir: Directorio de salida.
+        use_wls: Si True, aplica filtrado WLS.
+        lr_max_diff: Error máximo permitido en la consistencia L-R, en píxeles.
+        min_confidence: Confianza WLS mínima (0-255). 0 desactiva este filtro.
     """
+    if len(images_left) != len(images_right):
+        raise ValueError(
+            f"Cantidad de imágenes distinta: "
+            f"{len(images_left)} izquierdas y {len(images_right)} derechas."
+        )
+
+    if lr_max_diff < 0:
+        raise ValueError("lr_max_diff debe ser >= 0.")
+
+    if not 0 <= min_confidence <= 255:
+        raise ValueError("min_confidence debe estar entre 0 y 255.")
+
+    os.makedirs(disparity_output_dir, exist_ok=True)
+
+    right_matcher = cv.ximgproc.createRightMatcher(stereo)
+
+    wls_filter = None
+    if use_wls:
+        wls_filter = cv.ximgproc.createDisparityWLSFilter(
+            matcher_left=stereo
+        )
+        wls_filter.setLambda(8000.0)
+        wls_filter.setSigmaColor(1.5)
+
     for img_left_path, img_right_path in zip(images_left, images_right):
-        left_image_gray = imread_unicode(img_left_path, cv.IMREAD_GRAYSCALE)
-        right_image_gray = imread_unicode(img_right_path, cv.IMREAD_GRAYSCALE)
-        if left_image_gray is None or right_image_gray is None:
+        left = imread_unicode(img_left_path, cv.IMREAD_GRAYSCALE)
+        right = imread_unicode(img_right_path, cv.IMREAD_GRAYSCALE)
+
+        if left is None or right is None:
+            print(f"[WARN] No se pudieron leer: {img_left_path} / {img_right_path}")
             continue
 
-        rectified_left_gray = cv.remap(
-            left_image_gray,
+        if left.shape != right.shape:
+            print(f"[WARN] Tamaños distintos: {img_left_path} / {img_right_path}")
+            continue
+
+        left_rect = cv.remap(
+            left,
             left_rectification_map_x,
             left_rectification_map_y,
             cv.INTER_LINEAR,
         )
-        rectified_right_gray = cv.remap(
-            right_image_gray,
+        right_rect = cv.remap(
+            right,
             right_rectification_map_x,
             right_rectification_map_y,
             cv.INTER_LINEAR,
         )
 
-        # SGBM devuelve la disparidad en enteros escalados x16 -> pasar a float real
-        disparity = (
-            stereo.compute(rectified_left_gray, rectified_right_gray).astype(np.float32)
-            / 16.0
+        # 1. Disparidades originales, en formato fijo (escala x16).
+        disp_left = stereo.compute(left_rect, right_rect)
+        disp_right = right_matcher.compute(right_rect, left_rect)
+
+        # Convertir a píxeles reales para evaluar la consistencia.
+        d_left = disp_left.astype(np.float32) / 16.0
+        d_right = disp_right.astype(np.float32) / 16.0
+
+        h, w = d_left.shape
+        x_left = np.broadcast_to(np.arange(w, dtype=np.float32), (h, w))
+
+        # Correspondencia: x_right = x_left - d_left.
+        x_right = np.rint(x_left - d_left).astype(np.int32)
+
+        valid_left = (
+            np.isfinite(d_left)
+            & (disp_left > (stereo.getMinDisparity() - 1) * 16)
+            & (d_left > 0)
+            & (x_right >= 0)
+            & (x_right < w)
         )
 
-        disparity_filename_stem = (
-            os.path.basename(img_left_path).replace("left", "disp").replace(".jpg", "")
+        # Consultar la disparidad derecha en la posición correspondiente.
+        x_right_safe = np.clip(x_right, 0, w - 1)
+        rows = np.arange(h)[:, None]
+        corresponding_d_right = d_right[rows, x_right_safe]
+
+        valid_right = (
+            disp_right[rows, x_right_safe]
+            > (right_matcher.getMinDisparity() - 1) * 16
         )
-        # Disparidad REAL (float): es la que usa la nube local. NO usar el PNG para 3D.
+
+        # La disparidad derecha tiene signo opuesto.
+        lr_error = np.abs(d_left + corresponding_d_right)
+
+        lr_mask = (
+            valid_left
+            & valid_right
+            & np.isfinite(corresponding_d_right)
+            & (lr_error <= lr_max_diff)
+        )
+
+        # 2. Filtrado WLS. OpenCV espera disparidades en escala x16.
+        confidence = None
+
+        if use_wls:
+            filtered_disp = wls_filter.filter(
+                disp_left,
+                left_rect,
+                None,
+                disp_right,
+            )
+
+            confidence = wls_filter.getConfidenceMap()
+            disparity = filtered_disp.astype(np.float32) / 16.0
+        else:
+            disparity = d_left.copy()
+
+        # 3. Máscara final: consistencia, disparidad positiva y finitud.
+        valid = lr_mask & np.isfinite(disparity) & (disparity > 0)
+
+        if confidence is not None and min_confidence > 0:
+            valid &= confidence >= min_confidence
+
+        # Convención del pipeline: 0 representa píxeles inválidos.
+        disparity[~valid] = 0.0
+
+        # 4. Guardar la disparidad real en píxeles para la reconstrucción.
+        filename = os.path.basename(img_left_path)
+        stem = os.path.splitext(filename)[0]
+        if stem.startswith("left"):
+            stem = "disp" + stem[len("left"):]
+
         np.save(
-            os.path.join(disparity_output_dir, disparity_filename_stem + ".npy"),
-            disparity,
-        )
-        # PNG normalizado solo para visualización / informe
-        disparity_preview = cv.normalize(
-            disparity, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U
-        )
-        imwrite_unicode(
-            os.path.join(disparity_output_dir, disparity_filename_stem + ".png"),
-            disparity_preview,
+            os.path.join(disparity_output_dir, stem + ".npy"),
+            disparity.astype(np.float32),
         )
 
+        # 5. Vista previa: escalar usando solo píxeles válidos.
+        preview = np.zeros((h, w), dtype=np.uint8)
+
+        if np.any(valid):
+            values = disparity[valid]
+            lo, hi = np.percentile(values, [2, 98])
+
+            if hi > lo:
+                scaled = np.clip(
+                    (values - lo) / (hi - lo), 0, 1
+                )
+                preview[valid] = (scaled * 255).astype(np.uint8)
+
+        imwrite_unicode(
+            os.path.join(disparity_output_dir, stem + ".png"),
+            preview,
+        )
+
+        valid_ratio = 100.0 * np.count_nonzero(valid) / valid.size
+        print(
+            f"[OK] {stem}: {valid_ratio:.1f}% de píxeles válidos "
+            f"(WLS={'sí' if use_wls else 'no'})"
+        )
+        
 
 def merge_global_point_cloud(
     images_left: Sequence[str],
@@ -281,58 +394,89 @@ def merge_global_point_cloud(
     min_disparity: int = 0,
     z_min: float = 100.0,
     z_max: float = 2000.0,
+    voxel_size: float = 2.0,
+    roi_min: tuple[float, float, float] | None = None,
+    roi_max: tuple[float, float, float] | None = None,
+    merge_every: int = 1,
 ) -> tuple[o3d.geometry.PointCloud, list[o3d.geometry.TriangleMesh], int, int]:
-    """Transform and merge local clouds using the notebook's reconstruction loop.
-
-    Args:
-        images_left: Left image paths in capture order.
-        disparity_dir: Directory containing real ``disp_<index>.npy`` disparities.
-        Q: Disparity-to-3D reprojection matrix from stereo rectification.
-        left_rectification_map_x, left_rectification_map_y: Left rectification maps.
-        charuco_detector: Detector returned by ``create_charuco_detector``.
-        charuco_board: ChArUco board associated with the detector.
-        rectified_intrinsic: Rectified left intrinsic matrix, ``P1[:3, :3]``.
-        min_disparity: Minimum valid disparity for local point clouds.
-        z_min, z_max: Valid depth range in millimeters in each local camera frame.
-
-    Returns:
-        Merged cloud, camera coordinate frames, merged pair count and count
-        of pairs discarded because their board pose was not found.
-        Images without a saved disparity are skipped.
     """
+    Reconstruye y fusiona nubes de puntos reduciendo su tamaño progresivamente.
+
+    roi_min y roi_max definen los límites XYZ de una ROI en coordenadas
+    del mundo, en las mismas unidades que Q (en este pipeline, mm).
+
+    voxel_size: lado del vóxel para downsampling, en unidades del mundo.
+    merge_every: reduce la nube global cada N pares procesados.
+    """
+    if voxel_size <= 0:
+        raise ValueError("voxel_size debe ser positivo.")
+    if merge_every < 1:
+        raise ValueError("merge_every debe ser >= 1.")
+    if (roi_min is None) != (roi_max is None):
+        raise ValueError("Hay que proporcionar roi_min y roi_max juntos.")
+
+    roi = None
+    if roi_min is not None:
+        roi_min_arr = np.asarray(roi_min, dtype=float)
+        roi_max_arr = np.asarray(roi_max, dtype=float)
+
+        if (
+            roi_min_arr.shape != (3,)
+            or roi_max_arr.shape != (3,)
+            or not np.all(np.isfinite(roi_min_arr))
+            or not np.all(np.isfinite(roi_max_arr))
+            or np.any(roi_min_arr >= roi_max_arr)
+        ):
+            raise ValueError("Los límites de la ROI deben ser XYZ válidos.")
+
+        roi = o3d.geometry.AxisAlignedBoundingBox(
+            min_bound=roi_min_arr,
+            max_bound=roi_max_arr,
+        )
+
     global_point_cloud = o3d.geometry.PointCloud()
-    camera_frames = []  # poses de cámara para visualizar
-    merged_pair_count, discarded_pair_count = 0, 0
+    camera_frames = []
+    merged_pair_count = 0
+    discarded_pair_count = 0
 
     for left_path in images_left:
-        disparity_filename_stem = (
-            os.path.basename(left_path).replace("left", "disp").replace(".jpg", "")
-        )
-        disparity_file_path = os.path.join(
-            disparity_dir, disparity_filename_stem + ".npy"
-        )
+        filename = os.path.basename(left_path)
+        stem = os.path.splitext(filename)[0]
+        if stem.startswith("left"):
+            stem = "disp" + stem[len("left"):]
+
+        disparity_file_path = os.path.join(disparity_dir, stem + ".npy")
+
         if not os.path.exists(disparity_file_path):
             continue
+
         disparity = np.load(disparity_file_path)
 
-        # Pose de esta cámara respecto del mundo (tablero ChArUco)
+        # Detectar la pose de la cámara respecto del tablero.
         left_image_gray = imread_unicode(left_path, cv.IMREAD_GRAYSCALE)
+        if left_image_gray is None:
+            discarded_pair_count += 1
+            continue
+
         rectified_left_gray = cv.remap(
             left_image_gray,
             left_rectification_map_x,
             left_rectification_map_y,
             cv.INTER_LINEAR,
         )
+
         camera_to_world_transform = estimate_global_pose(
-            rectified_left_gray, charuco_detector, charuco_board, rectified_intrinsic
+            rectified_left_gray,
+            charuco_detector,
+            charuco_board,
+            rectified_intrinsic,
         )
-        if (
-            camera_to_world_transform is None
-        ):  # sin tablero detectado -> se descarta el par
+
+        if camera_to_world_transform is None:
             discarded_pair_count += 1
             continue
 
-        # Nube local y TRANSFORMACIÓN cámara -> mundo
+        # Construir la nube local y pasarla al sistema de coordenadas del mundo.
         point_cloud_i = build_local_point_cloud(
             left_path,
             disparity,
@@ -343,12 +487,52 @@ def merge_global_point_cloud(
             z_min=z_min,
             z_max=z_max,
         )
-        point_cloud_i.transform(camera_to_world_transform)
-        global_point_cloud += point_cloud_i
 
-        # Pose de la cámara (marco de ejes) para verificar la órbita de captura
-        camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=40)
+        point_cloud_i.transform(camera_to_world_transform)
+
+        # 1. Recortar la región de interés en coordenadas globales.
+        if roi is not None and len(point_cloud_i.points) > 0:
+            point_cloud_i = point_cloud_i.crop(roi)
+
+        # 2. Reducir la nube local ANTES de fusionarla.
+        if len(point_cloud_i.points) > 0:
+            point_cloud_i = point_cloud_i.voxel_down_sample(voxel_size)
+
+        # 3. Fusionar solo los puntos ya reducidos.
+        global_point_cloud += point_cloud_i
+        merged_pair_count += 1
+
+        # 4. Reducir periódicamente la nube acumulada.
+        if merged_pair_count % merge_every == 0:
+            if len(global_point_cloud.points) > 0:
+                global_point_cloud = global_point_cloud.voxel_down_sample(
+                    voxel_size
+                )
+
+        # Guardar el marco de referencia de la cámara.
+        camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+            size=40
+        )
         camera_frame.transform(camera_to_world_transform)
         camera_frames.append(camera_frame)
-        merged_pair_count += 1
-    return global_point_cloud, camera_frames, merged_pair_count, discarded_pair_count
+
+        print(
+            f"[{merged_pair_count}] {stem}: "
+            f"{len(point_cloud_i.points):,} puntos locales; "
+            f"{len(global_point_cloud.points):,} puntos globales"
+        )
+
+        # Liberar referencias temporales antes de procesar el siguiente par.
+        del disparity, point_cloud_i
+
+    # Asegurar que la nube final quede reducida incluso si el último lote
+    # no coincide con merge_every.
+    if len(global_point_cloud.points) > 0:
+        global_point_cloud = global_point_cloud.voxel_down_sample(voxel_size)
+
+    return (
+        global_point_cloud,
+        camera_frames,
+        merged_pair_count,
+        discarded_pair_count,
+    )
