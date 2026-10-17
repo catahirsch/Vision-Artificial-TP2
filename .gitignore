@@ -54,6 +54,11 @@ Thumbs.db
 Desktop.ini
 
 # Ignorar solo archivos generados pesados
-data/processed/
+data/processed/*
 *.ply
 *.pcd
+
+# Incluir solo la nube optimizada; conservar los intermedios fuera de Git.
+!data/processed/palacio/
+data/processed/palacio/*
+!data/processed/palacio/nube_palacio_optimizada.ply

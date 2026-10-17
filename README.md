@@ -9,9 +9,16 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 
 ## Entregable final
 
-- **Nube de puntos final optimizada (`.ply` binario):** `<LINK A GOOGLE DRIVE>`
-  > No se incluye en el repositorio por su tamaño (orden de decenas de MB).
-- **Dataset propio (opcional):** `<LINK A GOOGLE DRIVE>`
+- **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
+  5,47 MB y 202.741 puntos en la ejecución actual.
+- **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
+- **Datasets propios incluidos:** [calibración](data/calibration),
+  [Palacio](data/raw/palacio) y [peluche](data/raw/peluche).
+
+La nube final se conserva en su ubicación original, sin duplicarla en otra
+carpeta. `.gitignore` permite incluir únicamente ese `.ply`; la nube global y las
+disparidades siguen excluidas. En GitHub también se puede usar **Download raw
+file** desde la página del archivo para descargarlo sin bajar todo el proyecto.
 
 ## Estructura del repositorio
 
@@ -21,8 +28,9 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 │   ├── calibration/       # 63 pares del tablero de calibración
 │   ├── calibration_results/ # .pkl, matrices legibles y metadatos
 │   ├── raw/               # palacio (72 pares) y peluche unificado (70 pares)
+│   ├── processed/palacio/ # nube optimizada incluida; intermedios excluidos
 │   └── examples/          # imágenes de demostración de la cátedra
-├── code_examples/         # código de referencia de la cátedra
+├── notebooks/             # calibración, reconstrucción y optimización/medición
 ├── src/                   # código fuente del pipeline (ver abajo)
 ├── report/                # informe (LaTeX + PDF)
 └── README.md
@@ -30,23 +38,28 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 
 ## Requisitos
 
-- Python 3.10+
-- Dependencias (ver `requirements.txt`):
+- Entorno probado: **Python 3.13.7 en macOS Apple Silicon**.
+- Versiones exactas de todas las dependencias: [requirements.txt](requirements.txt).
+  Dependencias principales:
 
 ```
-opencv-contrib-python==<version>
-open3d==<version>
-numpy==<version>
+opencv-contrib-python==4.13.0.92
+open3d==0.20.0
+numpy==2.2.6
 ```
 
 Instalación:
 
 ```bash
 python -m venv .venv
-# Windows:  .venv\Scripts\activate
-# Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
+
+En Windows, activar con `.venv\Scripts\activate`. Abrir los notebooks en VS Code
+con las extensiones Python y Jupyter y seleccionar el intérprete de `.venv`.
+No instalar `opencv-python` junto a `opencv-contrib-python`, que ya incluye los
+módulos principales y ArUco.
 
 ## Uso
 
@@ -64,7 +77,8 @@ márgenes. Confirmar el lado físico del tablero y validar una distancia conocid
 antes de reportar medidas en milímetros. Los RMS y la alineación rectificada
 deben revisarse antes de aceptar la calibración.
 
-> Completar a medida que se implementa cada etapa.
+Ejecutar los notebooks en orden y de arriba abajo. Las rutas funcionan con el
+kernel iniciado desde la raíz o desde `notebooks/`.
 
 1. **Calibración y rectificación estéreo**
    Abrir `notebooks/01_calibration.ipynb`, seleccionar el entorno `.venv` y ejecutar
@@ -72,22 +86,36 @@ deben revisarse antes de aceptar la calibración.
    Cada ejecución actualiza los parámetros, mapas y diagnósticos guardados.
    Después de recalibrar, ejecutar el notebook 02 completo para regenerar las
    disparidades y nubes con los nuevos mapas y `Q`.
-2. **Disparidad + nube local + pose global** (por cada par de `captures/`)
-   ```bash
-   # <comando>
-   ```
+2. **Disparidad + nube local + pose global**
+   Ejecutar [notebooks/02_reconstruction.ipynb](notebooks/02_reconstruction.ipynb).
+   La configuración predeterminada usa `dataset_name = "palacio"`. Carga los mapas
+   del notebook 01, genera disparidades con SGBM, WLS y consistencia
+   izquierda–derecha, y estima las poses respecto del ChArUco. Guarda los
+   intermedios en `data/processed/palacio/`, incluida
+   `nube_global_palacio.ply`. El ChArUco usa una grilla de 9 × 13 cuadrados de
+   42 mm, marcadores de 31,5 mm y `DICT_5X5_100`.
 3. **Fusión y optimización de la nube + export `.ply`**
-   ```bash
-   # <comando>
-   ```
+   La fusión se realiza al final del notebook 02. Luego ejecutar
+   [notebooks/03_optimization_measurement.ipynb](notebooks/03_optimization_measurement.ipynb):
+   carga la nube global, aplica el recorte espacial, submuestreo de 1,5 mm y
+   eliminación estadística de outliers (`nb_neighbors=20`, `std_ratio=1.5`).
+   Exporta la nube binaria a
+   `data/processed/palacio/nube_palacio_optimizada.ply` y guarda las figuras en
+   `report/report_images/`. Si se cambia de objeto, adaptar también la ruta de
+   entrada y la caja de recorte del notebook 03.
 4. **Medición métrica**
-   ```bash
-   # <comando>
-   ```
+   La última celda del notebook 03 calcula las dimensiones AABB y OBB en
+   milímetros. Configurar `actual_height_mm` si se dispone de una medida física
+   para calcular el error relativo. Las dimensiones actuales son provisionales:
+   hay que validar el recorte antes de aceptarlas como medidas del objeto.
 
-## Google Colab
+Después de recalibrar, ejecutar los notebooks 02 y 03 completos para mantener
+coherentes los mapas, las disparidades, las poses y la nube final. Al preparar una
+nueva entrega, incluir también la versión actualizada del `.ply` optimizado.
 
-`<LINK AL NOTEBOOK DE COLAB>`
+Las llamadas a `show_geometries()` abren el visor de Open3D y la celda continúa
+al cerrar la ventana. Se pueden omitir las visualizaciones y las capturas si el
+entorno no tiene soporte gráfico.
 
 ## Notas
 
