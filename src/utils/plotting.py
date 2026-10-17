@@ -1,16 +1,7 @@
-"""
-Funciones de graficación y visualización del TP2.
+"""Plotting and visualization utilities for the stereo reconstruction notebooks.
 
-Encapsula los gráficos usados en los notebooks para poder generarlos con una sola
-llamada:
-
-- ``mostrar_par_rectificado``: par original vs. rectificado con líneas epipolares.
-- ``mostrar_disparidad``: mapa de disparidad con barra de color.
-- ``visualizar_nubes``: ventana interactiva de Open3D.
-- ``guardar_captura_o3d``: render *offscreen* de una escena de Open3D a PNG.
-
-Las funciones de Matplotlib aceptan un parámetro ``guardar`` con la ruta de salida;
-si se indica, la figura se guarda (creando el directorio si hace falta).
+Display rectification comparisons, disparity maps and Open3D scenes. Functions
+with a ``save_path`` argument create the output directory when needed.
 """
 
 from __future__ import annotations
@@ -27,7 +18,12 @@ from ..calibration_rectification import rectify_image_pair
 
 
 def _save_figure(figure, save_path: str | None) -> None:
-    """Guarda ``fig`` en ``guardar`` creando el directorio si no existe."""
+    """Save a Matplotlib figure, creating its parent directory when needed.
+
+    Args:
+        figure: Matplotlib figure to save.
+        save_path: Output image path, or ``None`` to skip saving.
+    """
     if save_path:
         directory = os.path.dirname(save_path)
         if directory:
@@ -44,33 +40,32 @@ def show_rectified_pair(
     num_lines: int = 10,
     save_path: str | None = None,
 ):
-    """
-    Muestra el par original vs. rectificado en una grilla 2x2.
+    """Plot the original and rectified stereo pairs in a 2 x 2 grid.
 
-    Sobre las imágenes rectificadas dibuja líneas horizontales de referencia: un
-    mismo punto físico debe caer en la misma fila en ambas, lo que verifica la
-    rectificación. Las imágenes se asumen en formato BGR (como las lee OpenCV).
+    Draw horizontal reference lines on the rectified images to inspect epipolar
+    alignment. Corresponding physical points should lie on the same image row.
+    The figure is created and optionally saved; the caller handles display.
 
     Args:
-        img_left, img_right: Par original (BGR).
-        rect_left, rect_right: Par rectificado (BGR).
-        image_size (tuple): ``(ancho, alto)`` en píxeles.
-        n_lineas (int): Cantidad de líneas epipolares de referencia.
-        guardar (str | None): Ruta de salida del PNG; si es None, no se guarda.
-
-    Returns:
-        matplotlib.figure.Figure: La figura generada.
+        img_left: Original left BGR image.
+        img_right: Original right BGR image.
+        rect_left: Rectified left BGR image.
+        rect_right: Rectified right BGR image.
+        image_size: Image size as ``(width, height)``, in pixels.
+        num_lines: Number of candidate line positions; the endpoints are omitted.
+        save_path: Optional output image path.
     """
     figure, axes = plt.subplots(2, 2, figsize=(12, 8))
     axes[0, 0].imshow(cv.cvtColor(img_left, cv.COLOR_BGR2RGB))
-    axes[0, 0].set_title("Izquierda Original")
+    axes[0, 0].set_title("Original left")
     axes[0, 1].imshow(cv.cvtColor(img_right, cv.COLOR_BGR2RGB))
-    axes[0, 1].set_title("Derecha Original")
+    axes[0, 1].set_title("Original right")
     axes[1, 0].imshow(cv.cvtColor(rect_left, cv.COLOR_BGR2RGB))
-    axes[1, 0].set_title("Izquierda Rectificada")
+    axes[1, 0].set_title("Rectified left")
     axes[1, 1].imshow(cv.cvtColor(rect_right, cv.COLOR_BGR2RGB))
-    axes[1, 1].set_title("Derecha Rectificada")
+    axes[1, 1].set_title("Rectified right")
 
+    # Si el mismo punto cae en filas distintas, la rectificación todavía no cierra.
     for y in np.linspace(0, image_size[1], num_lines)[1:-1]:
         axes[1, 0].axhline(y, color="r", linestyle="--", alpha=0.6)
         axes[1, 1].axhline(y, color="r", linestyle="--", alpha=0.6)
@@ -85,38 +80,33 @@ def show_rectified_pair(
 
 def show_disparity(
     disparity: np.ndarray,
-    title: str = "Mapa de disparidad",
+    title: str = "Disparity map",
     cmap: str = "magma",
     save_path: str | None = None,
 ):
-    """
-    Muestra un mapa de disparidad con barra de color.
+    """Display a disparity map with a color bar and optionally save the figure.
 
     Args:
-        disparity (np.ndarray): Mapa de disparidad (float, en píxeles).
-        titulo (str): Título de la figura.
-        cmap (str): Mapa de color de Matplotlib.
-        guardar (str | None): Ruta de salida del PNG; si es None, no se guarda.
-
-    Returns:
-        matplotlib.figure.Figure: La figura generada.
+        disparity: Floating-point disparity map, in pixels.
+        title: Figure title.
+        cmap: Matplotlib color map name.
+        save_path: Optional output image path.
     """
     figure = plt.figure(figsize=(10, 5))
     plt.imshow(disparity, cmap=cmap)
     plt.title(title)
-    plt.colorbar(label="disparidad (px)")
+    plt.colorbar(label="disparity (px)")
     plt.axis("off")
     _save_figure(figure, save_path)
     plt.show()
 
 
 def show_geometries(geometries: list, title: str = "Open3D"):
-    """
-    Abre una ventana interactiva de Open3D con las geometrías dadas.
+    """Open an interactive Open3D window for the supplied geometries.
 
     Args:
-        geometrias (list): Lista de geometrías de Open3D (nubes, mallas, ejes).
-        titulo (str): Título de la ventana.
+        geometries: Open3D point clouds, meshes or coordinate frames to display.
+        title: Window title.
     """
     o3d.visualization.draw_geometries(geometries, window_name=title)
 
@@ -127,16 +117,15 @@ def save_open3d_screenshot(
     width: int = 1280,
     height: int = 960,
 ) -> None:
-    """
-    Renderiza una escena de Open3D a una imagen PNG sin abrir una ventana visible.
+    """Render an Open3D scene to an image without opening a visible window.
 
-    Útil para generar figuras del informe (por ejemplo, la nube global con las
-    poses de cámara) de forma automática.
+    Use this to generate report figures such as the merged cloud and camera poses.
 
     Args:
-        geometrias (list): Lista de geometrías de Open3D a renderizar.
-        guardar (str): Ruta de salida del PNG.
-        width, height (int): Resolución de la captura.
+        geometries: Open3D geometries to render.
+        save_path: Output image path, usually with a ``.png`` extension.
+        width: Screenshot width, in pixels.
+        height: Screenshot height, in pixels.
     """
     directory = os.path.dirname(save_path)
     if directory:
@@ -153,7 +142,12 @@ def save_open3d_screenshot(
 
 
 def show_calibration_errors(diagnostics: dict, save_path: str | None = None):
-    """Plot, optionally save and display reprojection and vertical errors per capture."""
+    """Plot reprojection and rectified vertical errors for each capture.
+
+    Args:
+        diagnostics: Calibration diagnostics containing per-capture metrics in ``rows``.
+        save_path: Optional output image path; the figure is also displayed.
+    """
     rows = diagnostics["rows"]
     used_pair_ids = [row["pair_id"] for row in rows]
     per_view_rms = np.array(
@@ -164,17 +158,17 @@ def show_calibration_errors(diagnostics: dict, save_path: str | None = None):
     )
     diagnostics = rows
     figure, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-    axes[0].plot(used_pair_ids, per_view_rms[:, 0], ".-", label="Izquierda")
+    axes[0].plot(used_pair_ids, per_view_rms[:, 0], ".-", label="Left")
     axes[0].plot(
-        used_pair_ids, per_view_rms[:, 1], ".-", label="Derecha desde pose izquierda"
+        used_pair_ids, per_view_rms[:, 1], ".-", label="Right from left-camera pose"
     )
-    axes[0].set_ylabel("RMS reproyección (px)")
+    axes[0].set_ylabel("Reprojection RMS (px)")
     axes[0].legend()
     axes[1].plot(
         used_pair_ids, [row["vertical_alignment_rms_px"] for row in diagnostics], ".-"
     )
-    axes[1].set_ylabel("RMS vertical (px)")
-    axes[1].set_xlabel("Índice del par de calibración")
+    axes[1].set_ylabel("Vertical RMS (px)")
+    axes[1].set_xlabel("Calibration pair index")
     for axis in axes:
         axis.grid(alpha=0.3)
     figure.tight_layout()
@@ -189,11 +183,22 @@ def show_rectification_example(
     image_size: tuple[int, int],
     save_path: str | None = None,
 ):
-    """Load a dataset pair, rectify it and display/save the comparison figure."""
+    """Load a dataset pair, rectify it and display the comparison figure.
+
+    Args:
+        dataset_name: Dataset directory name under ``data/raw``.
+        index: Stereo capture number to load.
+        maps: Stereo rectification maps returned by ``rectify``.
+        image_size: Calibration image size as ``(width, height)``.
+        save_path: Optional output image path.
+
+    Raises:
+        ValueError: If the example image size differs from the calibration size.
+    """
     img_left, img_right = get_image_at_index(dataset_name=dataset_name, index=index)
     if img_left.shape[1::-1] != image_size or img_right.shape[1::-1] != image_size:
         raise ValueError(
-            "La resolución del ejemplo difiere de la resolución de calibración."
+            "The example image size differs from the calibration image size."
         )
     rect_left, rect_right = rectify_image_pair(img_left, img_right, maps)
     figure = show_rectified_pair(

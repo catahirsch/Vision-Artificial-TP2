@@ -20,14 +20,14 @@ def print_matrix(name: str, matrix: np.ndarray) -> None:
     not modified.
 
     Args:
-        name (str): Label displayed to the left of the matrix.
-        matrix (np.ndarray): Two-dimensional array containing the values to display.
+        name: Label displayed to the left of the matrix.
+        matrix: Two-dimensional array containing the values to display.
 
     Raises:
         ValueError: If the array does not have exactly two dimensions.
     """
     if matrix.ndim != 2:
-        raise ValueError("matrix debe ser un array de dos dimensiones.")
+        raise ValueError("matrix must be a two-dimensional array.")
 
     rows = []
     for row in matrix:
@@ -59,7 +59,12 @@ def print_matrix(name: str, matrix: np.ndarray) -> None:
 
 
 def print_calibration_results(calib: dict, calibration_rms: dict) -> None:
-    """Display calibrated matrices, calibration RMS values and the metric baseline."""
+    """Display calibrated matrices, RMS values and the metric baseline.
+
+    Args:
+        calib: Stereo calibration matrices and image size.
+        calibration_rms: Left, right and stereo calibration RMS values, in pixels.
+    """
     for name, value in calib.items():
         if name != "image_size":
             print_matrix(name=name, matrix=value)
@@ -73,7 +78,13 @@ def print_calibration_results(calib: dict, calibration_rms: dict) -> None:
 def print_calibration_diagnostics(
     diagnostics: dict, rectified_focal: float, alpha: float
 ) -> None:
-    """Print aggregate validation errors and the five worst right-camera views."""
+    """Print validation errors and the five worst right-camera views.
+
+    Args:
+        diagnostics: Aggregate validation errors and per-capture metrics in ``rows``.
+        rectified_focal: Rectified focal length, in pixels.
+        alpha: Rectification scaling used to generate the maps.
+    """
     validation_rms = diagnostics["validation_rms"]
     vertical_rms = diagnostics["vertical_rms"]
     diagnostics = diagnostics["rows"]

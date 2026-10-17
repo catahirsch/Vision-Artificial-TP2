@@ -1,16 +1,7 @@
-"""
-Funciones del pipeline de reconstrucción 3D por estéreo multivista (TP2).
+"""Stereo disparity, local point clouds and ChArUco-based global reconstruction.
 
-Agrupa las utilidades usadas en ``notebooks/02_reconstruction.ipynb``:
-
-- ``indice_par``: ordenamiento numérico de los pares de imágenes.
-- ``construir_nube_local``: nube de puntos 3D de un par, a partir de su disparidad.
-- ``crear_detector_charuco`` / ``estimar_pose_global``: pose de la cámara respecto
-  del tablero ChArUco (marco de mundo).
-
-Las funciones reciben explícitamente sus dependencias (mapas de rectificación,
-matriz ``Q``, intrínseca rectificada, etc.) para no depender de variables globales
-del notebook.
+Utilities for ``notebooks/02_reconstruction.ipynb`` receive rectification maps,
+reprojection matrices and camera parameters explicitly, without notebook globals.
 """
 
 from __future__ import annotations
@@ -26,17 +17,15 @@ from .utils.utils import imread_unicode, imwrite_unicode
 
 
 def get_pair_index(path: str) -> int:
-    """
-    Índice numérico de una imagen ``left_<n>.jpg`` / ``right_<n>.jpg``.
+    """Extract the capture number from a stereo image filename.
 
-    Permite ordenar los pares por número (0, 1, 2, ...) en lugar de
-    alfabéticamente (0, 1, 10, 11, 2, ...).
+    Use this index to sort pairs numerically rather than lexicographically.
 
     Args:
-        path (str): Ruta o nombre de archivo de la imagen.
+        path: Image path or filename in the form ``left_<n>.jpg`` or ``right_<n>.jpg``.
 
     Returns:
-        int: El número ``<n>`` contenido en el nombre del archivo.
+        Capture number encoded in the filename.
     """
     return int(os.path.basename(path).split("_")[1].split(".")[0])
 
@@ -51,24 +40,23 @@ def build_local_point_cloud(
     z_min: float = 100.0,
     z_max: float = 2000.0,
 ) -> o3d.geometry.PointCloud:
-    """
-    Nube de puntos 3D (frame rectificado izquierdo) a partir de la disparidad y Q.
+    """Build a colored point cloud in the rectified left camera frame.
 
-    Reproyecta la disparidad a 3D con ``cv.reprojectImageTo3D`` y la matriz ``Q``,
-    colorea cada punto con la imagen izquierda rectificada y descarta los píxeles
-    sin correspondencia válida y los que caen fuera del rango de profundidad.
+    Reproject pixel disparities with ``Q``, assign colors from the rectified left
+    image and discard invalid matches, non-finite points and out-of-range depths.
 
     Args:
-        left_path (str): Ruta de la imagen izquierda original del par.
-        disparity (np.ndarray): Mapa de disparidad real (float, en píxeles).
-        Q (np.ndarray): Matriz de reproyección 4x4 obtenida en la rectificación.
-        map1x, map1y (np.ndarray): Mapas de rectificación de la cámara izquierda.
-        min_disp (int): Disparidad mínima válida; por debajo se descarta.
-        z_min, z_max (float): Rango de profundidad válido en milímetros.
+        left_path: Path to the original left image.
+        disparity: Floating-point disparity map, in pixels; zero marks invalid pixels.
+        Q: Rectification reprojection matrix with shape ``(4, 4)``.
+        left_rectification_map_x: Horizontal remapping coordinates for the left camera.
+        left_rectification_map_y: Vertical remapping coordinates for the left camera.
+        min_disparity: Disparity threshold, in pixels; only larger values are retained.
+        z_min: Exclusive lower depth bound, in millimeters.
+        z_max: Exclusive upper depth bound, in millimeters.
 
     Returns:
-        o3d.geometry.PointCloud: Nube de puntos coloreada en el sistema de la
-        cámara izquierda rectificada.
+        Colored point cloud in the rectified left camera coordinate system.
     """
     left_image = imread_unicode(left_path, cv.IMREAD_COLOR)
     rectified_left_color = cv.remap(
@@ -100,15 +88,20 @@ def create_charuco_detector(
     marker_mm: float = 31.5,
     dict_id: int = cv.aruco.DICT_5X5_100,
 ):
-    """
-    Construye el tablero ChArUco del marco de mundo y su detector.
+    """Create the ChArUco world-reference board and its detector.
 
-    Los valores por defecto corresponden al tablero usado en las capturas de
-    reconstrucción (grid 9x13, cuadrado 42 mm, marcador 31.5 mm, DICT_5X5_100).
+    Defaults match the reconstruction captures: a 9 x 13 board with 42 mm squares,
+    31.5 mm markers and the ``DICT_5X5_100`` dictionary.
+
+    Args:
+        squares_x: Number of board squares along the horizontal axis.
+        squares_y: Number of board squares along the vertical axis.
+        square_mm: Board square side length, in millimeters.
+        marker_mm: ArUco marker side length, in millimeters.
+        dict_id: OpenCV predefined ArUco dictionary identifier.
 
     Returns:
-        tuple: ``(board, detector)`` de OpenCV (``cv.aruco.CharucoBoard`` y
-        ``cv.aruco.CharucoDetector``).
+        ChArUco board and its associated OpenCV detector.
     """
     aruco_dict = cv.aruco.getPredefinedDictionary(dict_id)
     board = cv.aruco.CharucoBoard(
@@ -126,24 +119,22 @@ def estimate_global_pose(
     dist: np.ndarray | None = None,
     min_corners: int = 6,
 ):
-    """
-    Transformación 4x4 (cámara rectificada -> mundo), o ``None`` si no hay tablero.
+    """Estimate the transform from the rectified left camera to the world frame.
 
-    Detecta el tablero ChArUco en la imagen rectificada, estima la pose
-    mundo -> cámara con ``cv.solvePnP`` y la invierte para obtener cámara -> mundo.
-    La imagen se asume rectificada, por lo que se usa la intrínseca rectificada y
-    distorsión nula.
+    Detect ChArUco corners, solve the world-to-camera pose and invert it. The input
+    image is assumed to be rectified, so distortion defaults to zero.
 
     Args:
-        rect_left_gray (np.ndarray): Imagen izquierda rectificada en escala de grises.
-        detector: ``cv.aruco.CharucoDetector`` (ver ``crear_detector_charuco``).
-        board: ``cv.aruco.CharucoBoard`` asociado al detector.
-        K_rect (np.ndarray): Intrínseca rectificada (``P1[:3, :3]``).
-        dist (np.ndarray | None): Distorsión; por defecto nula (imagen rectificada).
-        min_corners (int): Mínimo de esquinas ChArUco para aceptar la detección.
+        rect_left_gray: Rectified left grayscale image.
+        detector: ChArUco detector returned by ``create_charuco_detector``.
+        board: ChArUco board associated with the detector.
+        rectified_intrinsic: Rectified intrinsic matrix, usually ``P1[:3, :3]``.
+        dist: Distortion coefficients; ``None`` uses five zero coefficients.
+        min_corners: Minimum number of detected ChArUco corners required.
 
     Returns:
-        np.ndarray | None: Matriz homogénea 4x4 cámara -> mundo, o ``None``.
+        Homogeneous camera-to-world matrix with shape ``(4, 4)``, or ``None`` if
+        too few corners are detected or pose estimation fails.
     """
     if dist is None:
         dist = np.zeros(5)
@@ -162,7 +153,7 @@ def estimate_global_pose(
     if not ok:
         return None
 
-    # solvePnP da mundo -> cámara; se invierte para llevar la nube de cámara a mundo.
+    # Ojo: solvePnP da mundo -> cámara; acá necesitamos la vuelta, cámara -> mundo.
     camera_rotation, _ = cv.Rodrigues(rvec)
     inverse_rotation = camera_rotation.T
     inverse_translation = (-inverse_rotation @ tvec).flatten()
@@ -217,30 +208,39 @@ def compute_disparities(
     lr_max_diff: float = 1.5,
     min_confidence: float = 0.0,
 ) -> None:
-    """
-    Calcula disparidades, filtra con WLS opcional y aplica consistencia
-    izquierda-derecha. Guarda disparidades float32 en píxeles.
+    """Compute, filter and save disparities for rectified stereo image pairs.
+
+    Apply left-right consistency and optional WLS filtering. Save float32 pixel
+    disparities as ``.npy`` files and scaled grayscale previews as ``.png`` files.
+    Invalid pixels are stored as zero.
 
     Args:
-        images_left, images_right: Pares correspondientes y en el mismo orden.
-        stereo: Matcher SGBM para la imagen izquierda.
-        *_rectification_map_*: Mapas de rectificación de ambas cámaras.
-        disparity_output_dir: Directorio de salida.
-        use_wls: Si True, aplica filtrado WLS.
-        lr_max_diff: Error máximo permitido en la consistencia L-R, en píxeles.
-        min_confidence: Confianza WLS mínima (0-255). 0 desactiva este filtro.
+        images_left: Left image paths, ordered to match ``images_right``.
+        images_right: Right image paths, ordered to match ``images_left``.
+        stereo: Left-image SGBM matcher.
+        left_rectification_map_x: Horizontal remapping coordinates for the left camera.
+        left_rectification_map_y: Vertical remapping coordinates for the left camera.
+        right_rectification_map_x: Horizontal remapping coordinates for the right camera.
+        right_rectification_map_y: Vertical remapping coordinates for the right camera.
+        disparity_output_dir: Directory for disparity arrays and preview images.
+        use_wls: Whether to apply weighted least-squares disparity filtering.
+        lr_max_diff: Maximum left-right consistency error, in pixels.
+        min_confidence: Minimum WLS confidence in the range 0-255; zero disables it.
+
+    Raises:
+        ValueError: If image-list lengths differ or filtering thresholds are invalid.
     """
     if len(images_left) != len(images_right):
         raise ValueError(
-            f"Cantidad de imágenes distinta: "
-            f"{len(images_left)} izquierdas y {len(images_right)} derechas."
+            f"Mismatched image counts: "
+            f"{len(images_left)} left and {len(images_right)} right."
         )
 
     if lr_max_diff < 0:
-        raise ValueError("lr_max_diff debe ser >= 0.")
+        raise ValueError("lr_max_diff must be >= 0.")
 
     if not 0 <= min_confidence <= 255:
-        raise ValueError("min_confidence debe estar entre 0 y 255.")
+        raise ValueError("min_confidence must be between 0 and 255.")
 
     os.makedirs(disparity_output_dir, exist_ok=True)
 
@@ -283,7 +283,7 @@ def compute_disparities(
         disp_left = stereo.compute(left_rect, right_rect)
         disp_right = right_matcher.compute(right_rect, left_rect)
 
-        # Convertir a píxeles reales para evaluar la consistencia.
+        # OpenCV devuelve valores por 16; primero los bajamos a píxeles reales.
         d_left = disp_left.astype(np.float32) / 16.0
         d_right = disp_right.astype(np.float32) / 16.0
 
@@ -311,7 +311,7 @@ def compute_disparities(
             > (right_matcher.getMinDisparity() - 1) * 16
         )
 
-        # La disparidad derecha tiene signo opuesto.
+        # La derecha viene con signo opuesto: acá se suman, no se restan.
         lr_error = np.abs(d_left + corresponding_d_right)
 
         lr_mask = (
@@ -380,7 +380,7 @@ def compute_disparities(
             f"[OK] {stem}: {valid_ratio:.1f}% de píxeles válidos "
             f"(WLS={'sí' if use_wls else 'no'})"
         )
-        
+
 
 def merge_global_point_cloud(
     images_left: Sequence[str],
@@ -399,21 +399,43 @@ def merge_global_point_cloud(
     roi_max: tuple[float, float, float] | None = None,
     merge_every: int = 1,
 ) -> tuple[o3d.geometry.PointCloud, list[o3d.geometry.TriangleMesh], int, int]:
-    """
-    Reconstruye y fusiona nubes de puntos reduciendo su tamaño progresivamente.
+    """Reconstruct and merge point clouds in the ChArUco world frame.
 
-    roi_min y roi_max definen los límites XYZ de una ROI en coordenadas
-    del mundo, en las mismas unidades que Q (en este pipeline, mm).
+    Estimate each camera pose, transform its local cloud, optionally crop it and
+    downsample before merging. Periodic downsampling limits accumulated cloud size.
+    World coordinates and voxel dimensions use the units encoded by ``Q`` (mm here).
 
-    voxel_size: lado del vóxel para downsampling, en unidades del mundo.
-    merge_every: reduce la nube global cada N pares procesados.
+    Args:
+        images_left: Original left image paths for the stereo captures.
+        disparity_dir: Directory containing the corresponding ``disp_<n>.npy`` files.
+        Q: Rectification reprojection matrix with shape ``(4, 4)``.
+        left_rectification_map_x: Horizontal remapping coordinates for the left camera.
+        left_rectification_map_y: Vertical remapping coordinates for the left camera.
+        charuco_detector: Detector for the world-reference board.
+        charuco_board: ChArUco board defining the world coordinate system.
+        rectified_intrinsic: Intrinsic matrix of the rectified left camera.
+        min_disparity: Exclusive lower disparity threshold, in pixels.
+        z_min: Exclusive lower depth bound in the rectified camera frame.
+        z_max: Exclusive upper depth bound in the rectified camera frame.
+        voxel_size: Positive voxel side length for point-cloud downsampling.
+        roi_min: Optional minimum XYZ bounds of the world-space region of interest.
+        roi_max: Optional maximum XYZ bounds; required together with ``roi_min``.
+        merge_every: Downsample the accumulated cloud after this many merged pairs.
+
+    Returns:
+        Global point cloud, camera-frame meshes, number of merged pairs and number
+        of pairs discarded because their image or board pose was unavailable.
+        Captures with missing disparity files are skipped without being counted.
+
+    Raises:
+        ValueError: If voxel size, merge interval or region-of-interest bounds are invalid.
     """
     if voxel_size <= 0:
-        raise ValueError("voxel_size debe ser positivo.")
+        raise ValueError("voxel_size must be positive.")
     if merge_every < 1:
-        raise ValueError("merge_every debe ser >= 1.")
+        raise ValueError("merge_every must be >= 1.")
     if (roi_min is None) != (roi_max is None):
-        raise ValueError("Hay que proporcionar roi_min y roi_max juntos.")
+        raise ValueError("Provide roi_min and roi_max together.")
 
     roi = None
     if roi_min is not None:
@@ -427,7 +449,7 @@ def merge_global_point_cloud(
             or not np.all(np.isfinite(roi_max_arr))
             or np.any(roi_min_arr >= roi_max_arr)
         ):
-            raise ValueError("Los límites de la ROI deben ser XYZ válidos.")
+            raise ValueError("ROI bounds must be valid XYZ coordinates.")
 
         roi = o3d.geometry.AxisAlignedBoundingBox(
             min_bound=roi_min_arr,
@@ -494,7 +516,7 @@ def merge_global_point_cloud(
         if roi is not None and len(point_cloud_i.points) > 0:
             point_cloud_i = point_cloud_i.crop(roi)
 
-        # 2. Reducir la nube local ANTES de fusionarla.
+        # Bajamos primero la nube local, así la acumulada no se nos va de tamaño.
         if len(point_cloud_i.points) > 0:
             point_cloud_i = point_cloud_i.voxel_down_sample(voxel_size)
 

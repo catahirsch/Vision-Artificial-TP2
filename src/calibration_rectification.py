@@ -40,6 +40,7 @@ def get_image_points(
         raise ValueError("Provide non-empty left/right lists with matching lengths.")
     if square_size <= 0 or rows < 2 or cols < 2:
         raise ValueError("The square size must be positive and the grid at least 2x2.")
+    # Cada cuadrado fija la escala: si va en mm, la reconstrucción también.
     object_points_for_pair = np.zeros((rows * cols, 3), np.float32)
     object_points_for_pair[:, :2] = (
         np.mgrid[0:cols, 0:rows].T.reshape(-1, 2) * square_size
@@ -174,9 +175,9 @@ def stereo_reprojection_errors(
     detected corners in both images.
 
     Args:
-        objpoints: Checkerboard 3D points for each accepted image pair.
-        imgpoints_left: Detected checkerboard corners in left images.
-        imgpoints_right: Detected checkerboard corners in right images.
+        object_points: Checkerboard 3D points for each accepted image pair.
+        image_points_left: Detected checkerboard corners in left images.
+        image_points_right: Detected checkerboard corners in right images.
         K1: Left camera intrinsic matrix.
         D1: Left camera distortion coefficients.
         K2: Right camera intrinsic matrix.
@@ -197,6 +198,7 @@ def stereo_reprojection_errors(
     for object_points_for_pair, points_left, points_right in zip(
         object_points, image_points_left, image_points_right
     ):
+        # Ajustamos la pose solo con la izquierda; la derecha sirve de control.
         ok, rvec, tvec = cv2.solvePnP(object_points_for_pair, points_left, K1, D1)
         if not ok:
             raise RuntimeError("Could not estimate a checkerboard pose for validation.")
@@ -232,7 +234,25 @@ def rms_reprojection_error(
     R: np.ndarray,
     t: np.ndarray,
 ) -> float:
-    """Weighted RMS of stereo_reprojection_errors; distinct from calibration RMS."""
+    """Compute the point-count-weighted RMS of stereo reprojection errors.
+
+    The board pose is estimated from the left image only, so this validation metric
+    differs from the joint RMS reported by stereo calibration.
+
+    Args:
+        object_points: Checkerboard 3D points for each accepted image pair.
+        image_points_left: Detected checkerboard corners in left images.
+        image_points_right: Detected checkerboard corners in right images.
+        K1: Left camera intrinsic matrix.
+        D1: Left camera distortion coefficients.
+        K2: Right camera intrinsic matrix.
+        D2: Right camera distortion coefficients.
+        R: Rotation from the left camera coordinate system to the right.
+        t: Translation from the left camera coordinate system to the right.
+
+    Returns:
+        Stereo validation RMS, in pixels, weighted by the number of points per view.
+    """
     errors = stereo_reprojection_errors(
         object_points, image_points_left, image_points_right, K1, D1, K2, D2, R, t
     )
@@ -330,16 +350,31 @@ def rectify_image_pair(
 def load_calibration_data(
     images_dir: str | Path, square_size: float, rows: int, cols: int
 ) -> dict:
-    """Pair images by index and detect the checkerboard, retaining capture IDs."""
+    """Pair calibration images by capture number and detect checkerboard corners.
+
+    Args:
+        images_dir: Directory containing ``left_<n>.jpg`` and ``right_<n>.jpg`` pairs.
+        square_size: Checkerboard square side length, in millimeters.
+        rows: Number of inner checkerboard corners per column.
+        cols: Number of inner checkerboard corners per row.
+
+    Returns:
+        Calibration inputs containing image paths, image size, object and image
+        points, and the available, accepted and rejected capture IDs.
+
+    Raises:
+        FileNotFoundError: If no left calibration images are found.
+        ValueError: If left and right capture IDs do not match.
+    """
     images_dir = Path(images_dir)
     left_by_index = indexed_images(images_dir, "left")
     right_by_index = indexed_images(images_dir, "right")
     if not left_by_index:
-        raise FileNotFoundError(f"No hay imágenes en {images_dir}")
+        raise FileNotFoundError(f"No images found in {images_dir}")
     if left_by_index.keys() != right_by_index.keys():
         raise ValueError(
-            f"Pares incompletos. Sin derecha: {sorted(left_by_index.keys() - right_by_index.keys())}; "
-            f"sin izquierda: {sorted(right_by_index.keys() - left_by_index.keys())}"
+            f"Incomplete pairs. Missing right images: {sorted(left_by_index.keys() - right_by_index.keys())}; "
+            f"missing left images: {sorted(right_by_index.keys() - left_by_index.keys())}"
         )
 
     pair_ids = sorted(left_by_index)
@@ -376,7 +411,17 @@ def load_calibration_data(
 def evaluate_calibration(
     calib: Mapping, maps: Mapping, calibration_data: Mapping
 ) -> dict:
-    """Compute reprojection and rectified vertical errors for each accepted capture."""
+    """Compute reprojection and rectified vertical errors for each accepted capture.
+
+    Args:
+        calib: Stereo calibration matrices and distortion coefficients.
+        maps: Rectification rotations and projection matrices returned by ``rectify``.
+        calibration_data: Accepted object points, image points and capture IDs.
+
+    Returns:
+        Per-capture metrics in ``rows``, point-weighted stereo ``validation_rms``
+        and aggregate rectified ``vertical_rms``, all in pixels.
+    """
     K1, D1 = calib["left_K"], calib["left_dist"]
     K2, D2 = calib["right_K"], calib["right_dist"]
     R, t = calib["R"], calib["T"]
@@ -436,7 +481,25 @@ def save_calibration_results(
     square_size_mm: float,
     rectification_alpha: float,
 ) -> dict:
-    """Save calibration, maps, per-view CSV and provenance in the notebook 02 schema."""
+    """Save calibration matrices, rectification maps, diagnostics and provenance.
+
+    Args:
+        output_dir: Directory for the pickle, CSV and YAML artifacts.
+        calib: Stereo calibration parameters to save.
+        maps: Stereo rectification maps and matrices to save.
+        calibration_rms: Left, right and stereo calibration RMS values, in pixels.
+        calibration_data: Image directory, capture IDs and accepted calibration data.
+        diagnostics: Aggregate validation errors and per-capture metrics in ``rows``.
+        root_dir: Project root used to store the relative calibration image directory.
+        rows: Number of inner checkerboard corners per column.
+        cols: Number of inner checkerboard corners per row.
+        square_size_mm: Checkerboard square side length, in millimeters.
+        rectification_alpha: Rectification scaling used to generate the maps.
+
+    Returns:
+        Metadata written to ``metadata.yaml``, including artifact sizes and hashes.
+        The pickle artifacts follow the schema consumed by notebook 02.
+    """
     output_dir = Path(output_dir)
     root_dir = Path(root_dir)
     images_dir = calibration_data["directory"]
@@ -463,16 +526,16 @@ def save_calibration_results(
 
     metadata = {
         "schema_version": 1,
-        "status": "Calibración generada en notebook 01; revisar calidad y validar escala física.",
+        "status": "Calibration generated in notebook 01; review quality and validate physical scale.",
         "provenance": {
-            "tool": "OpenCV desde notebooks/01_calibration.ipynb",
+            "tool": "OpenCV via notebooks/01_calibration.ipynb",
             "calibration_date": datetime.now(timezone.utc).isoformat(),
             "generation_dependency_versions": {
                 "opencv": cv2.__version__,
                 "numpy": np.__version__,
             },
             "methods": [
-                "calibrateCamera (cada cámara)",
+                "calibrateCamera (each camera)",
                 "stereoCalibrate (CALIB_FIX_INTRINSIC)",
             ],
         },
@@ -496,7 +559,7 @@ def save_calibration_results(
             "square_size_mm": square_size_mm,
             "pattern_width_mm": (cols + 1) * square_size_mm,
             "pattern_height_mm": (rows + 1) * square_size_mm,
-            "source": "Configuración de notebooks/01_calibration.ipynb",
+            "source": "Configuration in notebooks/01_calibration.ipynb",
         },
         "quality": {
             "left_monocular_calibration_rms_px": calibration_rms["left"],
@@ -506,10 +569,10 @@ def save_calibration_results(
             "rectified_vertical_alignment_rms_px": vertical_rms,
         },
         "metric_scale": {
-            "length_unit": "mm según square_size_mm",
+            "length_unit": "mm based on square_size_mm",
             "physical_square_size_confirmed": True,
             "baseline_in_calibration_units": float(np.linalg.norm(t)),
-            "note": "Confirmar los 28 mm del tablero impreso y validar una distancia conocida antes de medir el objeto.",
+            "note": "Confirm the printed board square size is 28 mm and validate a known distance before measuring the object.",
         },
         "rectification": {"alpha": rectification_alpha},
         "artifacts": {},
@@ -544,11 +607,18 @@ def calibrate_and_evaluate(
     most ``tau``. Vertical alignment is reported but does not control rejection.
     ``max_iter`` limits the number of calibrations, including the first one.
 
+    Args:
+        calibration_data: Object/image points, capture IDs and source image paths.
+        image_size: Calibration image size as ``(width, height)``.
+        alpha: Rectification scaling; zero crops invalid borders.
+        tau: Maximum accepted per-camera, per-view reprojection RMS, in pixels.
+        max_iter: Maximum number of calibration iterations, including the first.
+
     Returns:
         A dictionary with ``calib``, ``calibration_rms``, ``maps``, ``diagnostics``
         and ``filtered_data``. Stop when every retained pair meets the threshold,
-        the iteration budget is exhausted, or rejection would leave fewer than
-        three views, returning the last evaluated calibration.
+        or the iteration budget is exhausted, returning the last evaluated
+        calibration.
         The returned data and diagnostics always describe that same calibration.
         Input data is not modified; original image paths and available pair IDs
         remain in ``filtered_data``, with updated used/rejected IDs and points.
@@ -579,6 +649,7 @@ def calibrate_and_evaluate(
             alpha=alpha,
         )
         diagnostics = evaluate_calibration(calib, maps, filtered_data)
+        # Ojo: el par se queda solo si las dos cámaras pasan el umbral.
         keep_indices = [
             index
             for index, row in enumerate(diagnostics["rows"])
@@ -592,7 +663,8 @@ def calibrate_and_evaluate(
         ]
         ready = len(keep_indices) == len(filtered_data["used_pair_ids"])
 
-        if ready or i == max_iter - 1: break
+        if ready or i == max_iter - 1:
+            break
 
         filtered_data["rejected_pair_ids"] = sorted(
             filtered_data["rejected_pair_ids"]

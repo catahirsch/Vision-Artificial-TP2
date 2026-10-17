@@ -7,18 +7,17 @@ import numpy as np
 
 
 def imread_unicode(path: str | Path, flags: int = cv2.IMREAD_COLOR) -> np.ndarray | None:
-    """Lee una imagen de forma segura ante rutas con caracteres no-ASCII.
+    """Read an image safely from a path containing non-ASCII characters.
 
-    ``cv2.imread`` falla silenciosamente (devuelve ``None``) cuando la ruta
-    contiene tildes, ``ñ`` o ``°`` en Windows. Esta función lee los bytes con
-    ``np.fromfile`` (que respeta Unicode) y los decodifica con ``cv2.imdecode``.
+    On Windows, ``cv2.imread`` may silently return ``None`` for Unicode paths.
+    Read bytes with ``np.fromfile`` and decode them with ``cv2.imdecode`` instead.
 
     Args:
-        path: Ruta de la imagen.
-        flags: Modo de lectura de OpenCV (por defecto, color BGR).
+        path: Input image path.
+        flags: OpenCV decoding mode; defaults to a BGR color image.
 
     Returns:
-        La imagen como ``np.ndarray``, o ``None`` si no se pudo leer/decodificar.
+        Decoded image array, or ``None`` if the file cannot be read or decoded.
     """
     try:
         data = np.fromfile(str(path), dtype=np.uint8)
@@ -30,18 +29,18 @@ def imread_unicode(path: str | Path, flags: int = cv2.IMREAD_COLOR) -> np.ndarra
 
 
 def imwrite_unicode(path: str | Path, image: np.ndarray) -> bool:
-    """Escribe una imagen de forma segura ante rutas con caracteres no-ASCII.
+    """Write an image safely to a path containing non-ASCII characters.
 
-    Análogo de ``imread_unicode`` para la escritura: codifica con
-    ``cv2.imencode`` según la extensión y vuelca los bytes con ``ndarray.tofile``,
-    que respeta Unicode en Windows (a diferencia de ``cv2.imwrite``).
+    Encode with ``cv2.imencode`` and write the bytes with ``ndarray.tofile`` to
+    support Unicode paths on Windows.
 
     Args:
-        path: Ruta de salida (la extensión define el formato, p. ej. ``.png``).
-        image: Imagen a guardar.
+        path: Output path; its extension selects the format, defaulting to PNG.
+        image: Image array to encode and save.
 
     Returns:
-        ``True`` si se escribió correctamente, ``False`` en caso contrario.
+        ``True`` if encoding and writing succeed, or ``False`` if encoding fails.
+        File-writing errors propagate to the caller.
     """
     path = Path(path)
     ext = path.suffix or ".png"
@@ -81,9 +80,20 @@ def get_image_at_index(dataset_name: str, index: int) -> tuple[np.ndarray, np.nd
 
 
 def indexed_images(directory: str | Path, side: str) -> dict[int, Path]:
-    """Index image paths by capture number, rejecting duplicate indices."""
+    """Index stereo image paths by capture number, rejecting duplicate indices.
+
+    Args:
+        directory: Directory containing stereo image files.
+        side: Filename prefix identifying the camera, usually ``left`` or ``right``.
+
+    Returns:
+        Mapping from capture numbers to matching ``<side>_<index>.jpg`` paths.
+
+    Raises:
+        ValueError: If a filename has a non-numeric index or indices are duplicated.
+    """
     paths = list(Path(directory).glob(f"{side}_*.jpg"))
     indexed = {int(path.stem.rsplit("_", 1)[1]): path for path in paths}
     if len(indexed) != len(paths):
-        raise ValueError(f"Hay índices de captura repetidos para {side}.")
+        raise ValueError(f"Duplicate capture indices for {side}.")
     return indexed
