@@ -190,9 +190,12 @@ parámetros utilizados.
 
 \subsection{Calibración y rectificación}
 
-La calibración se realizó con la herramienta \texttt{calib-stereo} de la cátedra, a partir de 63
+La calibración se implementó manualmente con OpenCV, a partir de 63
 pares de un \emph{checkerboard} de $9\times6$ esquinas internas y cuadrados de 28~mm, capturados
-desde distintos ángulos. Mediante \texttt{calibrateCamera} y \texttt{stereoCalibrate} se estiman los
+desde distintos ángulos. Las esquinas se detectaron con \texttt{cv.findChessboardCorners} y se
+refinaron a precisión subpíxel con \texttt{cv.cornerSubPix}, conservando únicamente los pares en
+los que el tablero se detecta en ambas cámaras. Luego, mediante \texttt{cv.calibrateCamera} (por
+cámara) y \texttt{cv.stereoCalibrate} (con \texttt{CALIB\_FIX\_INTRINSIC}) se estiman los
 intrínsecos y la distorsión de cada cámara y los extrínsecos relativos ($R$, $t$); el tamaño físico
 del cuadrado fija la escala métrica. Los resultados se exportan a archivos \texttt{.pkl} que el resto
 del pipeline consume sin recalibrar.
@@ -277,9 +280,90 @@ calibración, la calidad de las disparidades, la estimación de las poses y los 
 \section{Resultados y Discusión}
 
 \subsection{Resultados}
+
 % Evidencia visual y cuantitativa de cada etapa del pipeline:
 % - Calibración: parámetros obtenidos, error RMS, par original vs. rectificado.
+\subsubsection{Calibración}
+La calibración se realizó sobre imágenes de $1920\times1080$ px. De los 63 pares disponibles,
+49 presentaron el tablero detectado en ambas cámaras y, tras el filtrado iterativo por error de
+reproyección (umbral de 3 px), 13 se emplearon en la estimación final.
+
+Los parámetros intrínsecos obtenidos para ambas cámaras son
+
+Cámara izquierda:
+
+$$K_L = \begin{bmatrix} 602.9 & 0 & 970.4 \\ 0 & 603.6 & 533.9 \\ 0 & 0 & 1 \end{bmatrix}$$
+
+Cámara derecha:
+
+$$K_R = \begin{bmatrix} 596.0 & 0 & 955.3 \\ 0 & 596.3 & 523.9 \\ 0 & 0 & 1 \end{bmatrix}$$
+
+Ambas tienen skew $s = 0$ y $f_x \approx f_y$, lo que indica píxeles prácticamente cuadrados.
+Los coeficientes de distorsión siguen la estructura $(k_1, k_2, p_1, p_2, k_3)$ y para este caso
+son :
+$$D_L \approx [\,0.00,\ -0.02,\ 0,\ 0,\ 0\,] \qquad D_R \approx [\,0.01,\ -0.03,\ 0,\ 0,\ 0.01\,]$$
+
+Ambas cámaras poseen distorsión tangencial nula y bajos valores de distorsión radial causada por el lente.
+
+En cuanto a los parámetros extrínsecos relativos, se obtuvieron:
+$$R \approx \begin{bmatrix} 0.999987 & 0.0001 & 0.005 \\ -0.0001 & 0.999998 & -0.001 \\ -0.005 & 0.001 & 0.999986 \end{bmatrix} \approx I$$
+$$ T = \begin{bmatrix} -60.1229 \\ 0.156318 \\ -2.15031 \end{bmatrix}$$
+
+La matriz R indica rotación casi nula y con el vector de traslación T se puede obtener la separación física entre
+ambas cámaras, que es $|T| \approx 60.16$~mm y fija la escala métrica del sistema ($Z = f\,B/d$).
+
+Por otro lado, los errores de reproyección obtenidos fueron
+
+\begin{table}[H]
+\centering
+\caption{Error de reproyección RMS de la calibración estéreo.}
+\label{tab:rms_calibracion}
+\begin{tabular}{lc}
+\toprule
+\textbf{Métrica} & \textbf{RMS (px)} \\
+\midrule
+Monocular izquierda          & 0.869 \\
+Monocular derecha            & 0.609 \\
+Estéreo (OpenCV)             & 0.860 \\
+Validación (pose izquierda)  & 0.988 \\
+Alineación vertical rectificada & 0.654 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Todos por debajo de 1 px, indicando una calibración de calidad. Los 0.65 px de
+alineación vertical confirman que la rectificación dejó bien alineadas las filas.
+
+En el siguiente gráfico se muestra la calidad de la calibración por captura. El gráfico tiene
+dos paneles que comparten el eje x, que indica el índice de cada par de calibración utilizado.
+El panel superior muestra el error de reproyección RMS en píxeles (una línea por cámara), y el
+panel inferior el error de alineación vertical RMS tras la rectificación. En ambos, un valor
+más bajo indica mejor calidad.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{report_images/errores_calibracion.png}
+    \caption{Error de reproyección por captura utilizada en la calibración.}
+    \label{fig:errores_calib}
+\end{figure}
+
+Se observa que todas las capturas mantienen el error de reproyección por debajo de 1.3 px y la 
+alineación vertical en torno a 0.3--0.4 px, lo que confirma que no hay pares defectuosos y que la 
+rectificación alineó correctamente las filas.
+
+A continuación se muestra un ejemplo de dos imágenes originales junto con su rectificación,
+marcado con líneas rojas punteadas.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.1\linewidth]{report_images/rectificacion_palacio.png}
+    \caption{Par estéreo antes y después de la rectificación.}
+    \label{fig:rectificacion}
+\end{figure}
+
 % - Disparidad: mapa de disparidad de un par representativo, nube local.
+
+
 % - Pose y marco global: poses de cámara superpuestas con el marco de referencia.
 % - Nube global y optimización: antes/después en cada paso, cantidad de puntos.
 % - Medición métrica: tamaño estimado en mm, método, error relativo si se conoce.
