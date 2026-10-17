@@ -560,7 +560,7 @@ def calibrate_and_evaluate(
         filtered_data[key] = list(calibration_data[key])
 
     ready = False
-    for _ in range(max_iter):
+    for i in range(max_iter):
         calib, calibration_rms = calibrate(
             filtered_data["object_points"],
             filtered_data["image_points_left"],
@@ -592,7 +592,7 @@ def calibrate_and_evaluate(
         ]
         ready = len(keep_indices) == len(filtered_data["used_pair_ids"])
 
-        if ready: break
+        if ready or i == max_iter - 1: break
 
         filtered_data["rejected_pair_ids"] = sorted(
             filtered_data["rejected_pair_ids"]

@@ -2,10 +2,10 @@ schema_version: 1
 status: Calibración generada en notebook 01; revisar calidad y validar escala física.
 provenance:
   tool: OpenCV desde notebooks/01_calibration.ipynb
-  calibration_date: '2026-10-16T20:56:22.275719+00:00'
+  calibration_date: '2026-10-17T18:10:35.163815+00:00'
   generation_dependency_versions:
-    opencv: 4.10.0
-    numpy: 1.26.4
+    opencv: 4.13.0
+    numpy: 2.2.6
   methods:
   - calibrateCamera (cada cámara)
   - stereoCalibrate (CALIB_FIX_INTRINSIC)
@@ -15,24 +15,26 @@ image_size_per_camera_px:
 calibration_images:
   directory_from_project_root: data/calibration
   available_stereo_pairs: 63
-  pairs_used_for_saved_calibration: 12
+  pairs_used_for_saved_calibration: 13
   used_pair_ids:
   - 3
   - 4
-  - 5
+  - 24
   - 26
   - 27
   - 28
   - 34
   - 35
   - 37
-  - 41
+  - 38
+  - 39
   - 42
   - 52
   rejected_pair_ids:
   - 0
   - 1
   - 2
+  - 5
   - 6
   - 7
   - 8
@@ -51,7 +53,6 @@ calibration_images:
   - 21
   - 22
   - 23
-  - 24
   - 25
   - 29
   - 30
@@ -59,9 +60,8 @@ calibration_images:
   - 32
   - 33
   - 36
-  - 38
-  - 39
   - 40
+  - 41
   - 43
   - 44
   - 45
@@ -92,26 +92,26 @@ checkerboard:
   pattern_height_mm: 196.0
   source: Configuración de notebooks/01_calibration.ipynb
 quality:
-  left_monocular_calibration_rms_px: 0.9569879226287872
-  right_monocular_calibration_rms_px: 0.6256954428048787
-  stereo_reprojection_rms_px: 0.8976302742006994
-  stereo_validation_left_pose_rms_px: 1.001400921196781
-  rectified_vertical_alignment_rms_px: 0.6358934044837952
+  left_monocular_calibration_rms_px: 0.8693512541432835
+  right_monocular_calibration_rms_px: 0.6091381275716488
+  stereo_reprojection_rms_px: 0.8604452116614222
+  stereo_validation_left_pose_rms_px: 0.9879483317234119
+  rectified_vertical_alignment_rms_px: 0.6541064977645874
 metric_scale:
   length_unit: mm según square_size_mm
-  physical_square_size_confirmed: false
-  baseline_in_calibration_units: 60.6641386070765
+  physical_square_size_confirmed: true
+  baseline_in_calibration_units: 60.16158936553759
   note: Confirmar los 28 mm del tablero impreso y validar una distancia conocida antes
     de medir el objeto.
 rectification:
   alpha: 0.0
 artifacts:
   stereo_calibration.pkl:
-    bytes: 866
-    sha256: 1f228d93431d886c3dd8d03ef2024ad5fdb9a4399de176ae8bec23ba3af2591c
+    bytes: 867
+    sha256: 27356c916d797e41a65a7034f0a117f93c4e912fabc8bcb7973737dcea4485ba
   stereo_maps.pkl:
-    bytes: 33178618
-    sha256: 7f6efd1b39fafb5288c0162a5e4c2579980f82a0c8894aa75560975b7a40c26f
+    bytes: 33178619
+    sha256: 5e17672e2b7334705cc0113ccabc2d067e31f930c9fc9f71c6306097a0421ecc
   reprojection_errors.csv:
-    bytes: 815
-    sha256: 5381a306fe11f4c2f8785a5ca5d866c9d65583b05a879ba6055298acc772c53e
+    bytes: 877
+    sha256: 9db0cccb178fd4fa6e8bc6b221e0c55fa14dc914d1d33fb5a347c2c583a3f45f
