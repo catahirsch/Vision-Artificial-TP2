@@ -101,3 +101,94 @@ def print_calibration_diagnostics(
             f"{row['pair_id']:5d} | {row['left_reprojection_rms_px']:14.3f} | "
             f"{row['right_reprojection_rms_px']:12.3f} | {row['vertical_alignment_rms_px']:13.3f}"
         )
+
+
+def print_calibration_report_summary(calib: dict, diagnostics: dict) -> None:
+    """Print rounded calibration matrices and error extrema cited in the report.
+
+    Args:
+        calib: Calibrated intrinsic, distortion, rotation and translation arrays.
+        diagnostics: Calibration diagnostics containing per-capture metrics in ``rows``.
+    """
+    print("== Matrices con el redondeo usado en el informe ==")
+    for label, key, decimals in [
+        ("K_L", "left_K", 1), ("K_R", "right_K", 1),
+        ("D_L", "left_dist", 5), ("D_R", "right_dist", 5), ("R", "R", 6),
+    ]:
+        with np.printoptions(precision=decimals, floatmode="fixed", suppress=True):
+            print(f"{label} =\n{np.asarray(calib[key])}")
+    print("T =", np.array2string(
+        np.asarray(calib["T"]).ravel(), formatter={"float_kind": lambda v: f"{v:.6g}"}
+    ))
+    print(f"Baseline |t| = {np.linalg.norm(calib['T']):.2f} mm")
+
+    rows = diagnostics["rows"]
+    print("\n== Extremos de los errores por captura ==")
+    for side, key in [("izquierda", "left_reprojection_rms_px"),
+                      ("derecha", "right_reprojection_rms_px")]:
+        worst = max(rows, key=lambda row: row[key])
+        print(f"Máximo de reproyección {side}: {worst[key]:.3f} px (par {worst['pair_id']})")
+    key = "vertical_alignment_rms_px"
+    best = min(rows, key=lambda row: row[key])
+    worst = max(rows, key=lambda row: row[key])
+    print(f"Rango de alineación vertical RMS: {best[key]:.3f}--{worst[key]:.3f} px")
+    print(f"Mínimo vertical: par {best['pair_id']} ({best[key]:.3f} px)")
+    print("Dos mayores errores verticales:")
+    for row in sorted(rows, key=lambda row: row[key], reverse=True)[:2]:
+        print(f"  Par {row['pair_id']}: {row[key]:.3f} px")
+
+
+def print_optimization_reduction(point_counts: dict[str, int]) -> None:
+    """Print total and per-step point reductions from notebook 03's stage counts."""
+    initial = point_counts["inicial"]
+    final = point_counts["outliers"]
+    print(f"Reducción total: {100 * (1 - final / initial):.2f}%")
+    for label, before, after in [
+        ("recorte AABB", "inicial", "bbox"),
+        ("submuestreo por vóxeles", "bbox", "voxel"),
+        ("filtro estadístico", "voxel", "outliers"),
+    ]:
+        removed = point_counts[before] - point_counts[after]
+        print(f"Puntos eliminados por {label}: {removed:,}")
+
+
+def print_measurement_crop_diagnostics(aabb, crop_min: np.ndarray, crop_max: np.ndarray) -> None:
+    """Print cloud extrema and clearances to each crop face, in millimeters.
+
+    Args:
+        aabb: Axis-aligned bounding box computed from the final point cloud.
+        crop_min: XYZ lower bounds used for the spatial crop.
+        crop_max: XYZ upper bounds used for the spatial crop.
+    """
+    crop_min, crop_max = np.asarray(crop_min), np.asarray(crop_max)
+    cloud_min, cloud_max = aabb.get_min_bound(), aabb.get_max_bound()
+    with np.printoptions(precision=4, floatmode="fixed", suppress=True):
+        print("Orden de coordenadas: (X, Y, Z); unidades: mm")
+        print("Mínimo de la nube final:", cloud_min)
+        print("Máximo de la nube final:", cloud_max)
+        print("Límite inferior del recorte:", crop_min)
+        print("Límite superior del recorte:", crop_max)
+        print("Dimensiones de la caja de recorte:", crop_max - crop_min)
+        print("Distancia al límite inferior (mínimo nube - recorte):", cloud_min - crop_min)
+        print("Distancia al límite superior (recorte - máximo nube):", crop_max - cloud_max)
+
+
+def print_pose_diagnostics(diagnostics: dict) -> None:
+    """Print pose acceptance, reprojection errors and camera coordinates for the report.
+
+    Args:
+        diagnostics: Accepted IDs, camera-to-world poses, rejected IDs and per-pose RMS.
+    """
+    pair_ids = diagnostics["pair_ids"]
+    rejected = diagnostics["rejected_pair_ids"]
+    poses = np.asarray(diagnostics["poses"])
+    errors = np.asarray(diagnostics["reprojection_rms_px"])
+    total = len(pair_ids) + len(rejected)
+    print(f"Poses válidas: {len(pair_ids)} / {total} ({100 * len(pair_ids) / total:.1f}%)")
+    print(f"Pares descartados: {rejected}")
+    print(f"RMS PnP: mediana {np.median(errors):.2f} px; máximo {np.max(errors):.2f} px")
+    print(f"Mayor RMS: par {pair_ids[int(np.argmax(errors))]} ({np.max(errors):.3f} px)")
+    centers = poses[:, :3, 3]
+    print(f"Centro de la cámara del par {pair_ids[0]} (mm): {np.round(centers[0], 1)}")
+    print(f"Centro redondeado a mm enteros: {np.rint(centers[0]).astype(int)}")
+    print(f"Rango de Z de las cámaras (mm): {np.min(centers[:, 2]):.1f} a {np.max(centers[:, 2]):.1f}")

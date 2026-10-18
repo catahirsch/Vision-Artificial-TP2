@@ -11,24 +11,35 @@ import os
 import numpy as np
 import cv2 as cv
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import open3d as o3d
 
-from .utils import get_image_at_index
+from .utils import get_image_at_index, imread_unicode
+from .prints import print_pose_diagnostics
 from ..calibration_rectification import rectify_image_pair
+from ..reconstruction import estimate_global_pose, get_pair_index
 
 
-def _save_figure(figure, save_path: str | None) -> None:
+def _save_figure(
+    figure,
+    save_path: str | None,
+    *,
+    dpi: int = 120,
+    bbox_inches: str | None = "tight",
+) -> None:
     """Save a Matplotlib figure, creating its parent directory when needed.
 
     Args:
         figure: Matplotlib figure to save.
         save_path: Output image path, or ``None`` to skip saving.
+        dpi: Resolution of the saved image.
+        bbox_inches: Bounding-box adjustment; ``None`` preserves the canvas size.
     """
     if save_path:
         directory = os.path.dirname(save_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        figure.savefig(save_path, dpi=120, bbox_inches="tight")
+        figure.savefig(save_path, dpi=dpi, bbox_inches=bbox_inches)
 
 
 def show_rectified_pair(
@@ -109,6 +120,148 @@ def show_geometries(geometries: list, title: str = "Open3D"):
         title: Window title.
     """
     o3d.visualization.draw_geometries(geometries, window_name=title)
+
+
+def show_camera_poses_top_view(
+    camera_to_world_poses: np.ndarray,
+    pair_ids: list[int],
+    board,
+    point_cloud: o3d.geometry.PointCloud | None = None,
+    save_path: str | None = None,
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
+):
+    """Plot camera centers and optical axes projected onto the world's XY plane.
+
+    Args:
+        camera_to_world_poses: Camera-to-world transforms with shape ``(N, 4, 4)``.
+        pair_ids: Capture IDs in the same order as the transforms.
+        board: ChArUco board defining the world frame and its physical dimensions.
+        point_cloud: Optional world-space cloud, such as the optimized object.
+        save_path: Optional output image path; saved at 220 dpi.
+        xlim: Optional horizontal world-coordinate limits in millimeters.
+        ylim: Optional vertical world-coordinate limits in millimeters.
+
+    Returns:
+        Matplotlib figure, also displayed for inline use in a notebook.
+    """
+    poses = np.asarray(camera_to_world_poses)
+    if poses.shape != (len(pair_ids), 4, 4) or not len(pair_ids):
+        raise ValueError("Provide at least one 4x4 pose and one ID per pose.")
+    centers = poses[:, :3, 3]
+    squares_x, squares_y = board.getChessboardSize()
+    square_mm = board.getSquareLength()
+
+    with plt.rc_context({"font.size": 10, "axes.spines.top": False,
+                         "axes.spines.right": False}):
+        figure, axis = plt.subplots(figsize=(4.5, 5.0), layout="constrained")
+        axis.add_patch(Rectangle(
+            (0, 0), squares_x * square_mm, squares_y * square_mm,
+            fill=False, linestyle="--", linewidth=1.2, edgecolor="0.45",
+            label="Tablero ChArUco"
+        ))
+        if point_cloud is not None and len(point_cloud.points):
+            points = np.asarray(point_cloud.points)[::12]
+            colors = np.asarray(point_cloud.colors)[::12] if point_cloud.has_colors() else "0.5"
+            axis.scatter(points[:, 0], points[:, 1], c=colors, s=1,
+                         rasterized=True, zorder=2)
+        axis.plot(centers[:, 0], centers[:, 1], color="0.7", linewidth=0.8,
+                  zorder=1)
+        cameras = axis.scatter(centers[:, 0], centers[:, 1], c=pair_ids,
+                               cmap="viridis", s=24, zorder=3)
+        # The third rotation column is the camera's +Z optical axis in world space.
+        sample = np.arange(0, len(centers), 7)
+        optical = poses[sample, :2, 2]
+        axis.quiver(centers[sample, 0], centers[sample, 1], optical[:, 0],
+                    optical[:, 1], angles="xy", scale_units="xy", scale=1 / 70,
+                    color="0.25", width=0.005, zorder=3)
+        for index, offset in [(0, (8, 7)), (-1, (8, -15))]:
+            axis.annotate(f"Par {pair_ids[index]}", centers[index, :2],
+                          xytext=offset, textcoords="offset points", fontsize=9)
+        axis.scatter([0], [0], color="black", marker="+", s=60, zorder=4)
+        axis.annotate("Origen", (0, 0), xytext=(7, -15),
+                      textcoords="offset points", fontsize=9)
+        axis.set(xlabel="X del mundo (mm)", ylabel="Y del mundo (mm)",
+                 xlim=xlim, ylim=ylim)
+        axis.set_aspect("equal")
+        axis.grid(alpha=0.2)
+        axis.legend(loc="lower left", bbox_to_anchor=(0, 1.02), fontsize=9,
+                    framealpha=0.9)
+        colorbar = figure.colorbar(cameras, ax=axis, shrink=0.75, pad=0.03)
+        colorbar.set_label("Índice de captura")
+        _save_figure(figure, save_path, dpi=220, bbox_inches=None)
+        plt.show()
+    return figure
+
+
+def show_global_pose_example(
+    images_left: list[str],
+    maps: dict,
+    board,
+    detector,
+    point_cloud: o3d.geometry.PointCloud | None = None,
+    save_path: str | None = None,
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
+) -> dict:
+    """Estimate capture poses and display the report's global-frame figure.
+
+    Use the rectified grayscale images and pose solver used by the global merger.
+    Print pose counts and reprojection diagnostics from the detected ChArUco corners.
+    This only estimates poses and draws the supplied cloud; it does not rerun fusion.
+
+    Args:
+        images_left: Original left image paths, sorted by capture ID internally.
+        maps: Saved rectification maps, including the projection matrix ``P1``.
+        board: ChArUco world-reference board.
+        detector: Detector associated with ``board``.
+        point_cloud: Optional world-space cloud to overlay on the camera positions.
+        save_path: Optional output image path for the report.
+        xlim: Optional X world-coordinate limits in millimeters.
+        ylim: Optional Y world-coordinate limits in millimeters.
+
+    Returns:
+        Accepted IDs and poses, rejected IDs, and per-capture reprojection RMS in pixels.
+    """
+    intrinsic = np.asarray(maps["P1"])[:3, :3]
+    pair_ids, poses, rejected, errors = [], [], [], []
+    for path in sorted(images_left, key=get_pair_index):
+        pair_id = get_pair_index(path)
+        image = imread_unicode(path, cv.IMREAD_GRAYSCALE)
+        if image is None:
+            raise OSError(f"Could not load image: {path}")
+        rectified = cv.remap(
+            image, maps["left_map_x"], maps["left_map_y"], cv.INTER_LINEAR
+        )
+        pose = estimate_global_pose(rectified, detector, board, intrinsic)
+        if pose is None:
+            rejected.append(pair_id)
+            continue
+        pair_ids.append(pair_id)
+        poses.append(pose)
+        corners, ids, _, _ = detector.detectBoard(rectified)
+        object_points, image_points = board.matchImagePoints(corners, ids)
+        world_to_camera = np.linalg.inv(pose)
+        rotation, _ = cv.Rodrigues(world_to_camera[:3, :3])
+        projected, _ = cv.projectPoints(
+            object_points, rotation, world_to_camera[:3, 3], intrinsic, np.zeros(5)
+        )
+        difference = projected.reshape(-1, 2) - image_points.reshape(-1, 2)
+        errors.append(np.sqrt(np.mean(np.sum(difference**2, axis=1))))
+
+    poses = np.asarray(poses)
+    show_camera_poses_top_view(
+        poses, pair_ids, board, point_cloud=point_cloud, save_path=save_path,
+        xlim=xlim, ylim=ylim,
+    )
+    diagnostics = {
+        "pair_ids": pair_ids,
+        "poses": poses,
+        "rejected_pair_ids": rejected,
+        "reprojection_rms_px": np.asarray(errors),
+    }
+    print_pose_diagnostics(diagnostics)
+    return diagnostics
 
 
 def save_open3d_screenshot(

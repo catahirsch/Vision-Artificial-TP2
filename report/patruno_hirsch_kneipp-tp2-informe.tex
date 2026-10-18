@@ -54,6 +54,7 @@ métrica por estéreo multivista\par}
 \end{abstract}
 
 \begin{multicols}{2}
+\raggedcolumns
 
 \section{Introducción y Marco Teórico}
 El objetivo de este trabajo es reconstruir la nube de puntos 3D de un objeto a partir
@@ -296,17 +297,24 @@ $$K_L = \begin{bmatrix} 602.9 & 0 & 970.4 \\ 0 & 603.6 & 533.9 \\ 0 & 0 & 1 \end
 
 Cámara derecha:
 
-$$K_R = \begin{bmatrix} 596.0 & 0 & 955.3 \\ 0 & 596.3 & 523.9 \\ 0 & 0 & 1 \end{bmatrix}$$
+$$K_R = \begin{bmatrix} 595.9 & 0 & 955.3 \\ 0 & 596.3 & 523.9 \\ 0 & 0 & 1 \end{bmatrix}$$
 
 Ambas tienen skew $s = 0$ y $f_x \approx f_y$, lo que indica píxeles prácticamente cuadrados.
 Los coeficientes de distorsión siguen la estructura $(k_1, k_2, p_1, p_2, k_3)$ y para este caso
-son :
-$$D_L \approx [\,0.00,\ -0.02,\ 0,\ 0,\ 0\,] \qquad D_R \approx [\,0.01,\ -0.03,\ 0,\ 0,\ 0.01\,]$$
+son:
+{\small
+\begin{gather*}
+D_L \approx [\,0.00096, -0.01632, -0.00300, -0.00139, -0.00033\,] \\
+D_R \approx [\,0.00969, -0.03064, -0.00277, -0.00045, 0.00545\,]
+\end{gather*}
+}
 
-Ambas cámaras poseen distorsión tangencial nula y bajos valores de distorsión radial causada por el lente.
+Ambas cámaras presentan coeficientes de distorsión radial de baja magnitud y distorsión
+tangencial pequeña, pero no nula. En particular, $(p_1,p_2)$ es aproximadamente
+$(-0.00300,-0.00139)$ para la cámara izquierda y $(-0.00277,-0.00045)$ para la derecha.
 
 En cuanto a los parámetros extrínsecos relativos, se obtuvieron:
-$$R \approx \begin{bmatrix} 0.999987 & 0.0001 & 0.005 \\ -0.0001 & 0.999998 & -0.001 \\ -0.005 & 0.001 & 0.999986 \end{bmatrix} \approx I$$
+$$R \approx \begin{bmatrix} 0.999987 & 0.000131 & 0.005008 \\ -0.000121 & 0.999998 & -0.001947 \\ -0.005009 & 0.001947 & 0.999986 \end{bmatrix} \approx I$$
 $$ T = \begin{bmatrix} -60.1229 \\ 0.156318 \\ -2.15031 \end{bmatrix}$$
 
 La matriz R indica rotación casi nula y con el vector de traslación T se puede obtener la separación física entre
@@ -331,8 +339,9 @@ Alineación vertical rectificada & 0.654 \\
 \end{tabular}
 \end{table}
 
-Todos por debajo de 1 px, indicando una calibración de calidad. Los 0.65 px de
-alineación vertical confirman que la rectificación dejó bien alineadas las filas.
+Los RMS agregados son inferiores a 1 px. La alineación vertical rectificada tiene un
+RMS global de 0.654 px; este promedio subpíxel no implica que todas las capturas
+tengan errores inferiores a 1 px.
 
 En el siguiente gráfico se muestra la calidad de la calibración por captura. El gráfico tiene
 dos paneles que comparten el eje x, que indica el índice de cada par de calibración utilizado.
@@ -347,16 +356,18 @@ más bajo indica mejor calidad.
     \label{fig:errores_calib}
 \end{figure}
 
-Se observa que todas las capturas mantienen el error de reproyección por debajo de 1.3 px y la 
-alineación vertical en torno a 0.3--0.4 px, lo que confirma que no hay pares defectuosos y que la 
-rectificación alineó correctamente las filas.
+El error de reproyección por captura alcanza 2.298 px en la cámara izquierda para el par 52
+y 2.016 px en la derecha para el par 42. El RMS de alineación vertical por captura varía
+entre 0.297 y 1.386 px, con los mayores valores en los pares 42 (1.386 px) y 52 (1.112 px).
+Aunque estos pares cumplen el umbral de reproyección de 3 px utilizado para el filtrado,
+presentan mayor error residual y limitan la uniformidad de la alineación entre capturas.
 
 A continuación se muestra un ejemplo de dos imágenes originales junto con su rectificación,
 marcado con líneas rojas punteadas.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1.1\linewidth]{report_images/rectificacion_palacio.png}
+    \includegraphics[width=\linewidth]{report_images/rectificacion_palacio.png}
     \caption{Par estéreo antes y después de la rectificación.}
     \label{fig:rectificacion}
 \end{figure}
@@ -370,14 +381,151 @@ intensidad se encuentra más lejos.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1.1\linewidth]{report_images/disparidad_palacio.png}
-    \caption{Par estéreo antes y después de la rectificación.}
+    \includegraphics[width=\linewidth]{report_images/disparidad_palacio.png}
+    \caption{Mapa de disparidad del par 0 del Palacio, calculado con SGBM y filtrado WLS.
+    La barra de color indica la disparidad en píxeles; el valor cero representa píxeles inválidos.}
     \label{fig:disparidad}
 \end{figure}
 
-% - Pose y marco global: poses de cámara superpuestas con el marco de referencia.
-% - Nube global y optimización: antes/después en cada paso, cantidad de puntos.
-% - Medición métrica: tamaño estimado en mm, método, error relativo si se conoce.
+\subsubsection{Pose y marco global}
+Se obtuvo una pose válida respecto del ChArUco para 70 de los 72 pares del Palacio
+(97.2\%). Los pares 4 y 8 se descartaron porque la detección no alcanzó el mínimo
+de seis esquinas requerido. Las nubes de los pares aceptados se transformaron al
+marco del tablero con $T_{cw}$ y se acumularon en ese sistema común.
+
+La Figura~\ref{fig:poses_globales} muestra los centros de las cámaras proyectados
+sobre el plano $XY$, junto con el contorno del tablero y la nube final recortada.
+Su distribución alrededor del objeto es compatible con una captura desde distintos
+ángulos. Como ejemplo, el centro de la cámara del par 0 se encuentra aproximadamente
+en $(245,692,-223)$ mm. La coordenada $Z$ negativa responde al convenio del marco
+del tablero: en esta reconstrucción, las cámaras y el objeto quedan del lado
+negativo de su normal.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{report_images/poses_palacio_marco_global.png}
+    \caption{Vista superior en el marco global. Los puntos coloreados son los centros
+    de las 70 cámaras aceptadas; la línea los une en orden de captura. Las flechas
+    muestran la proyección del eje óptico de una selección de cámaras. El rectángulo
+    discontinuo delimita el tablero y la nube recortada se muestra en el centro.}
+    \label{fig:poses_globales}
+\end{figure}
+
+Como diagnóstico adicional, el RMS de reproyección de las esquinas ChArUco con
+las poses estimadas tuvo una mediana de 1.80 px y un máximo de 4.36 px. Estos
+valores describen el ajuste sobre las mismas esquinas usadas para estimar la pose;
+no constituyen una validación independiente. La aceptación se basó en la cantidad
+de esquinas y en el éxito de \texttt{solvePnP}, por lo que la precisión de las
+poses puede variar entre capturas y afectar el empalme de las nubes.
+
+\subsubsection{Nube global y optimización}
+La fusión de los 70 pares produjo una nube global de 17\,703\,320 puntos, aun
+después del submuestreo de 2 mm aplicado durante la acumulación. Como se observa
+en la Figura~\ref{fig:nube_global}, esta nube incluye tanto la maqueta como partes
+del tablero y del entorno capturado. Por ello, el primer paso de optimización fue
+seleccionar espacialmente la región del objeto.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\linewidth]{report_images/poses_palacio.png}
+    \caption{Nube global antes del recorte. La reconstrucción incluye el entorno
+    de la maqueta, que ocupa una región pequeña respecto de la escena completa.}
+    \label{fig:nube_global}
+\end{figure}
+
+La Tabla~\ref{tab:optimizacion} resume la cantidad de puntos conservados en cada
+etapa. El recorte AABB dejó 225\,228 puntos; el submuestreo con vóxeles de 1.5 mm
+los redujo a 214\,977 y el filtro estadístico, con 20 vecinos y
+\texttt{std\_ratio}$=1.5$, produjo los 202\,741 puntos de la nube final.
+
+\begin{table}[H]
+    \centering
+    \caption{Puntos conservados durante la optimización.}
+    \label{tab:optimizacion}
+    \begin{tabular}{lrr}
+        \toprule
+        \textbf{Etapa} & \textbf{Puntos} & \textbf{\% inicial} \\
+        \midrule
+        Global fusionada & 17\,703\,320 & 100.000 \\
+        Recorte AABB     &    225\,228 &   1.272 \\
+        Vóxel de 1.5 mm   &    214\,977 &   1.214 \\
+        Filtro estadístico &  202\,741 &   1.145 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth,trim=475 35 475 35,clip]{report_images/palacio_bbox.png}
+        \caption{Recorte.}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth,trim=475 35 475 35,clip]{report_images/palacio_voxel.png}
+        \caption{Vóxeles.}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth,trim=475 35 475 35,clip]{report_images/palacio_optimizada.png}
+        \caption{Final.}
+    \end{subfigure}
+    \caption{Comparación de la región seleccionada tras cada paso de optimización.
+    Se muestra la misma vista, con los márgenes blancos recortados para facilitar
+    la comparación.}
+    \label{fig:etapas_optimizacion}
+\end{figure}
+
+\begin{samepage}
+La reducción total fue del 98.85\% de los puntos de la nube global. La mayor parte
+corresponde a la exclusión espacial del entorno; dentro del recorte, los pasos de
+vóxeles y filtrado eliminaron 10\,251 y 12\,236 puntos, respectivamente. La
+Figura~\ref{fig:etapas_optimizacion} permite reconocer el volumen general de la
+maqueta, aunque persisten irregularidades en las superficies. La nube optimizada
+se exportó como \texttt{nube\_palacio\_optimizada.ply} en formato binario, con un
+tamaño de 5.47 MB.\par
+\end{samepage}
+
+\subsubsection{Medición métrica}
+Sobre la nube final se calcularon las extensiones de la AABB en los ejes del
+tablero. La Tabla~\ref{tab:mediciones} presenta las dimensiones obtenidas, redondeadas
+a 0.1 mm; este redondeo expresa la presentación numérica, no la precisión física
+del método.
+
+\begin{table}[H]
+    \centering
+    \caption{Dimensiones de la envolvente de la nube final.}
+    \label{tab:mediciones}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Dimensión AABB} & \textbf{Estimación (mm)} \\
+        \midrule
+        Ancho ($X$) & 90.0 \\
+        Largo ($Y$) & 380.0 \\
+        Alto ($Z$)  & 129.8 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+La OBB mínima devolvió extensiones de $380.0\times129.8\times90.0$ mm, ordenadas
+de mayor a menor. A la resolución numérica reportada, coinciden con las de la
+AABB. Ambas cajas se calculan sobre el mismo conjunto de puntos retenidos, por
+lo que esta coincidencia no valida de forma independiente el tamaño real del objeto.
+
+En particular, el ancho de 90 mm y el largo de 380 mm coinciden con las dimensiones
+de la caja utilizada para recortar la nube. Los extremos medidos en el archivo
+final están prácticamente sobre ambos límites de $X$ e $Y$, de modo que el recorte
+puede estar truncando parte de la maqueta o conservando puntos ajenos a ella en
+los bordes. Por este motivo, las cifras se interpretan como dimensiones
+\emph{provisionales de la región reconstruida}, pendientes de validar que la
+selección espacial contiene el objeto completo.
+
+La ejecución guardada no incluye una medida física de referencia
+(\texttt{actual\_height\_mm = None}), por lo que no se calcula un error
+relativo. La validación métrica requiere revisar el recorte, confirmar el tamaño
+físico del patrón de calibración y contrastar al menos una dimensión reconstruida
+con una medición directa del objeto.
 
 \subsection{Discusión}
 % Análisis crítico: problemas encontrados en el pipeline, limitaciones del método

@@ -28,8 +28,7 @@ file** desde la página del archivo para descargarlo sin bajar todo el proyecto.
 │   ├── calibration/       # 63 pares del tablero de calibración
 │   ├── calibration_results/ # .pkl, matrices legibles y metadatos
 │   ├── raw/               # palacio (72 pares) y peluche unificado (70 pares)
-│   ├── processed/palacio/ # nube optimizada incluida; intermedios excluidos
-│   └── examples/          # imágenes de demostración de la cátedra
+│   └── processed/palacio/ # nube optimizada incluida; intermedios excluidos
 ├── notebooks/             # calibración, reconstrucción y optimización/medición
 ├── src/                   # código fuente del pipeline (ver abajo)
 ├── report/                # informe (LaTeX + PDF)
@@ -38,7 +37,7 @@ file** desde la página del archivo para descargarlo sin bajar todo el proyecto.
 
 ## Requisitos
 
-- Entorno probado: **Python 3.13.7 en macOS Apple Silicon**.
+- Entorno probado: **Python 3.13.7**.
 - Versiones exactas de todas las dependencias: [requirements.txt](requirements.txt).
   Dependencias principales:
 
@@ -76,6 +75,13 @@ cuadrados) y cuadrados de **28 mm de lado**: un patrón de **280 × 196 mm**, si
 márgenes. Confirmar el lado físico del tablero y validar una distancia conocida
 antes de reportar medidas en milímetros. Los RMS y la alineación rectificada
 deben revisarse antes de aceptar la calibración.
+
+El campo `metric_scale.physical_square_size_confirmed` de `metadata.yaml` se
+guarda automáticamente como `True` en la implementación actual; ese valor no
+acredita una comprobación física del patrón. La escala debe validarse midiendo
+el lado del cuadrado impreso y contrastando una distancia conocida con la
+reconstrucción. Hasta realizar esa validación, las medidas en milímetros deben
+considerarse provisionales.
 
 Ejecutar los notebooks en orden y de arriba abajo. Las rutas funcionan con el
 kernel iniciado desde la raíz o desde `notebooks/`.
