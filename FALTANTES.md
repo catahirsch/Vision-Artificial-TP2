@@ -60,27 +60,7 @@ La consigna exige, como entregable:
 - Alternativa mejor: medir con regla el alto real del objeto y completar
   `actual_height_mm` en el notebook 03 (celda 18) para reportar el error relativo real.
 
-### 2.3 🟡 Descripción del dataset propio (consigna §3 "Recolección de imágenes propias")
-- El informe nunca presenta los datos de forma ordenada: **qué objeto** se reconstruye
-  (maqueta del "Palacio"), **con qué cámara** (la ELP estéreo de la cátedra), **cuántos
-  pares de captura** (72) y de **calibración** (63), y que el **marco de referencia** es
-  un tablero ChArUco visible en todas las tomas (consigna §3 pide objeto de referencia
-  visible en todas las capturas).
-- Falta un párrafo breve al inicio de **Metodología** (o de Resultados) con esa
-  descripción. Hoy esos datos aparecen sueltos y tarde (p. ej. "72 pares" recién en la
-  subsección de Pose).
-
-### 2.4 🟡 Parámetros usados en el código y no mencionados (consigna §6, Metodología → Disparidad: "parámetros ajustados")
-- **Filtro WLS:** se menciona el filtro pero no sus parámetros (λ = 8000, σ = 1.5).
-- **`alpha = 0` de la rectificación** (`cv.stereoRectify`): recorta los bordes inválidos
-  y define el FOV útil; no se menciona.
-- **`minDisparity = 0`:** se dice "disparidad superior al mínimo configurado" sin dar el
-  valor.
-- **Dimensiones del ChArUco** (9 × 13 cuadrados, 42 mm, marcadores 31,5 mm,
-  `DICT_5X5_100`): aparecen dispersas; conviene darlas donde se introduce el tablero, en
-  la subsección de Pose.
-
-### 2.5 🟡 Decisión sobre la malla de Poisson (consigna §4.3, opcional)
+### 2.3 🟡 Decisión sobre la malla de Poisson (consigna §4.3, opcional)
 - Se agregó la **Figura 7 (malla Poisson)** al informe, pero **no existe código** que la
   genere (ni en notebooks ni en `src/`). La imagen `palacio_malla_poisson.png` está
   suelta y no es reproducible.
@@ -89,7 +69,7 @@ La consigna exige, como entregable:
     `create_from_point_cloud_poisson`) para que la figura sea reproducible, o
   - **Quitar** la Figura 7 del informe.
 
-### 2.6 🟢 Pulido menor
+### 2.4 🟢 Pulido menor
 - Pie de la Figura 6 (`poses_palacio.png`) dice "Nube global antes del recorte", pero la
   imagen también incluye el origen del mundo y los ejes/frustums de las cámaras (nb02,
   celda 10). Ajustar el pie para reflejar que también muestra las poses.
@@ -107,7 +87,7 @@ La consigna exige, como entregable:
   `report/report_images/` (igual que se hace con las nubes de optimización en el
   notebook 03), y luego insertar esa figura en el informe.
 
-### 3.2 🟡 Poisson reproducible (solo si se mantiene la Figura 7 — tarea 2.5)
+### 3.2 🟡 Poisson reproducible (solo si se mantiene la Figura 7 — tarea 2.3)
 - En `notebooks/03_optimization_measurement.ipynb`, tras la nube optimizada, agregar:
   `clean_point_cloud.estimate_normals(...)` → `create_from_point_cloud_poisson(...)` y
   guardar la captura en `report/report_images/palacio_malla_poisson.png`.
@@ -121,7 +101,6 @@ La consigna exige, como entregable:
 
 ## 4. Limpieza del repositorio 🟢
 
-- [ ] Borrar el directorio vacío `capturespeluche/`.
 - [ ] Borrar `notebooks/RenderOption_2026-10-16-17-47-09.json` (generado por el visor de
   Open3D).
 - [ ] Al preparar la entrega, asegurarse de **no** incluir

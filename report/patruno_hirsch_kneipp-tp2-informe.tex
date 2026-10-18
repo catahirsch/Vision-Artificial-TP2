@@ -197,6 +197,14 @@ cámara respecto de un marco de referencia común para fusionar todas las nubes,
 la nube resultante y mide el objeto. A continuación se describe cada etapa con las técnicas y
 parámetros utilizados.
 
+\subsection{Dataset utilizado}
+El objeto reconstruido es una maqueta de un palacio, capturada con la cámara estéreo ELP
+provista por la cátedra, en imágenes de $1920\times1080$ px. Se generaron dos colecciones
+propias: una de calibración, con 63 pares de un \emph{checkerboard}, y otra de
+reconstrucción, con 72 pares del objeto tomados desde distintos ángulos. Como marco de
+referencia global (``mundo'') se usó un tablero ChArUco visible junto al objeto en todas
+las capturas, que permanece inmóvil respecto de la maqueta entre tomas.
+
 \subsection{Calibración y rectificación}
 
 La calibración se implementó manualmente con OpenCV, a partir de 63
@@ -209,19 +217,20 @@ intrínsecos y la distorsión de cada cámara y los extrínsecos relativos ($R$,
 del cuadrado fija la escala métrica. Los resultados se exportan a archivos \texttt{.pkl} que el resto
 del pipeline consume sin recalibrar.
 
-Con esos parámetros se calcularon los mapas de rectificación (\texttt{cv.stereoRectify}, que devuelve
-además la matriz $Q$ para pasar de disparidad a 3D, e \texttt{cv.initUndistortRectifyMap}) y se
+Con esos parámetros se calcularon los mapas de rectificación (\texttt{cv.stereoRectify} con
+\texttt{alpha}$=0$, que recorta los bordes inválidos y devuelve además la matriz $Q$ para
+pasar de disparidad a 3D, e \texttt{cv.initUndistortRectifyMap}) y se
 aplicaron a cada par con \texttt{cv.remap}. La alineación se verificó visualmente con líneas horizontales 
 sobre un par rectificado.
 
 \subsection{Disparidad y nube local}
 Para cada par de imágenes estéreo, se aplicaron los mapas de rectificación para alinear ambas cámaras y 
 facilitar la búsqueda de correspondencias sobre las mismas filas. Sobre las imágenes rectificadas en escala 
-de grises se calculó la disparidad mediante \texttt{StereoSGBM}, utilizando \texttt{blockSize}$=11$, 
-\texttt{numDisparities}$=240$, $P_1=8\cdot11^2$ y $P_2=32\cdot11^2$, junto con \texttt{uniquenessRatio}$=5$, 
-\texttt{speckleWindowSize}$=200$ y \texttt{speckleRange}$=2$. Para reducir correspondencias erróneas, se verificó 
-la consistencia entre las disparidades izquierda-derecha y derecha-izquierda, con una tolerancia de $1.5$ píxeles. 
-También se aplicó el filtro WLS (\textit{Weighted Least Squares}) para suavizar el mapa de disparidad preservando 
+de grises se calculó la disparidad mediante \texttt{StereoSGBM}, utilizando \texttt{minDisparity}$=0$,
+\texttt{numDisparities}$=240$, \texttt{blockSize}$=11$, $P_1=8\cdot11^2$ y $P_2=32\cdot11^2$, junto con \texttt{uniquenessRatio}$=5$,
+\texttt{speckleWindowSize}$=200$ y \texttt{speckleRange}$=2$. Para reducir correspondencias erróneas, se verificó
+la consistencia entre las disparidades izquierda-derecha y derecha-izquierda, con una tolerancia de $1.5$ píxeles.
+También se aplicó el filtro WLS (\textit{Weighted Least Squares}, con $\lambda=8000$ y $\sigma=1.5$) para suavizar el mapa de disparidad preservando
 las discontinuidades de profundidad.
 
 Mediante \texttt{cv.reprojectImageTo3D} y la matriz $Q$ obtenida durante la calibración estéreo, las disparidades 
@@ -231,8 +240,8 @@ la imagen izquierda rectificada. Finalmente, se conservaron los puntos con dispa
 coordenadas finitas y profundidad dentro del intervalo $100<Z<2000$ mm.
 
 \subsection{Pose global y transformación}
-Para expresar las nubes locales en un sistema de referencia común, se estimó la pose de la cámara izquierda respecto 
-del tablero ChArUco. Se detectaron sus esquinas en cada imagen izquierda rectificada y, mediante \texttt{board.matchImagePoints}, 
+Para expresar las nubes locales en un sistema de referencia común, se estimó la pose de la cámara izquierda respecto
+del tablero ChArUco (grilla de $9\times13$ cuadrados de $42$ mm, marcadores de $31{,}5$ mm y diccionario \texttt{DICT\_5X5\_100}). Se detectaron sus esquinas en cada imagen izquierda rectificada y, mediante \texttt{board.matchImagePoints}, 
 se obtuvieron las correspondencias entre sus coordenadas en píxeles y sus posiciones tridimensionales conocidas. 
 La estimación se realizó con \texttt{cv.solvePnP}, utilizando la matriz intrínseca rectificada, distorsión nula y el método 
 \texttt{SOLVEPNP\_SQPNP}. Se exigieron al menos seis esquinas válidas para aceptar la estimación.
