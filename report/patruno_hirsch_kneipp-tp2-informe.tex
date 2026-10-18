@@ -513,20 +513,6 @@ de mayor a menor. A la resolución numérica reportada, coinciden con las de la
 AABB. Ambas cajas se calculan sobre el mismo conjunto de puntos retenidos, por
 lo que esta coincidencia no valida de forma independiente el tamaño real del objeto.
 
-En particular, el ancho de 90 mm y el largo de 380 mm coinciden con las dimensiones
-de la caja utilizada para recortar la nube. Los extremos medidos en el archivo
-final están prácticamente sobre ambos límites de $X$ e $Y$, de modo que el recorte
-puede estar truncando parte de la maqueta o conservando puntos ajenos a ella en
-los bordes. Por este motivo, las cifras se interpretan como dimensiones
-\emph{provisionales de la región reconstruida}, pendientes de validar que la
-selección espacial contiene el objeto completo.
-
-La ejecución guardada no incluye una medida física de referencia
-(\texttt{actual\_height\_mm = None}), por lo que no se calcula un error
-relativo. La validación métrica requiere revisar el recorte, confirmar el tamaño
-físico del patrón de calibración y contrastar al menos una dimensión reconstruida
-con una medición directa del objeto.
-
 \subsection{Discusión}
 % Análisis crítico: problemas encontrados en el pipeline, limitaciones del método
 % y posibles mejoras.
