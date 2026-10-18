@@ -50,7 +50,15 @@ métrica por estéreo multivista\par}
 
 \begin{abstract}
 \noindent
-
+Se presenta un pipeline de reconstrucción 3D por estéreo multivista que, a partir de
+pares RGB capturados con una cámara estéreo, recupera la nube de puntos de un objeto
+y estima sus dimensiones métricas reales. El sistema se calibró manualmente con OpenCV
+(error de reproyección estéreo RMS de $0.86$~px y línea base de $60.16$~mm), se calculó
+la disparidad con \texttt{StereoSGBM} y filtrado WLS, y se fusionaron las nubes locales
+en un marco común mediante poses estimadas respecto de un tablero ChArUco con
+\texttt{solvePnP}. Tras el filtrado espacial, submuestreo y eliminación de outliers en
+Open3D, la nube final conserva $202\,741$ puntos ($5.47$~MB) y arroja dimensiones de
+$90.0\times380.0\times129.8$~mm. Se discuten las limitaciones del empalme y la medición.
 \end{abstract}
 
 \begin{multicols}{2}
@@ -387,6 +395,14 @@ intensidad se encuentra más lejos.
     \label{fig:disparidad}
 \end{figure}
 
+El mapa muestra el gradiente de profundidad esperado: el primer plano concentra las
+disparidades altas (tonos claros) y el fondo las bajas (tonos oscuros), según la relación
+inversa de la Ecuación~\ref{eq:profundidad}. Las regiones en negro son píxeles inválidos: aparecen incluso en
+zonas de alta disparidad (mesa cercana) porque dependen de la textura y no de la
+distancia, y sobre superficies homogéneas o con brillos el matcher no halla
+correspondencias únicas, a lo que se suman las oclusiones y el chequeo de consistencia
+izquierda--derecha; estos huecos se trasladan luego a la nube local.
+
 \subsubsection{Pose y marco global}
 Se obtuvo una pose válida respecto del ChArUco para 70 de los 72 pares del Palacio
 (97.2\%). Los pares 4 y 8 se descartaron porque la detección no alcanzó el mínimo
@@ -514,8 +530,50 @@ AABB. Ambas cajas se calculan sobre el mismo conjunto de puntos retenidos, por
 lo que esta coincidencia no valida de forma independiente el tamaño real del objeto.
 
 \subsection{Discusión}
-% Análisis crítico: problemas encontrados en el pipeline, limitaciones del método
-% y posibles mejoras.
+
+Los resultados muestran que el pipeline reconstruye la geometría general del objeto con
+escala métrica coherente, pero también revelan varias limitaciones. En la
+\textbf{calibración}, si bien los RMS agregados son subpíxel, los pares 42 y 52 presentan
+errores de reproyección cercanos a 2.3~px y de alineación vertical superiores a 1~px.
+Estos residuos, aunque toleran el umbral de filtrado, introducen una rectificación menos
+precisa en algunas vistas y se propagan al resto del pipeline.
+
+En la \textbf{disparidad}, \texttt{StereoSGBM} degrada su desempeño en regiones de poca
+textura, brillos especulares y bordes de oclusión, donde genera huecos o correspondencias
+erróneas. El filtro WLS y la verificación de consistencia izquierda--derecha mitigan parte
+del ruido, pero no lo eliminan; esto se traduce en las irregularidades de superficie visibles
+en la nube final (Figura~\ref{fig:etapas_optimizacion}).
+
+El \textbf{empalme} de las nubes es sensible a la calidad de las poses: el RMS de reproyección
+de las esquinas ChArUco tuvo una mediana de 1.80~px y un máximo de 4.36~px, y pequeños errores
+angulares desplazan las nubes lejanas, engrosando las superficies al acumularlas. No se aplicó
+un refinamiento posterior (ICP), que podría alinear mejor las nubes parciales y reducir el
+espesor aparente. Como exploración adicional se reconstruyó una malla de superficie con el
+método de Poisson (Figura~\ref{fig:malla_poisson}); recupera un volumen cerrado reconocible,
+pero cierra huecos de zonas no observadas con superficies interpoladas, por lo que se la
+reporta solo como resultado cualitativo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\linewidth,trim=475 35 475 35,clip]{report_images/palacio_malla_poisson.png}
+    \caption{Malla triangular obtenida con Poisson Surface Reconstruction a partir de la
+    nube optimizada (exploración opcional).}
+    \label{fig:malla_poisson}
+\end{figure}
+
+Respecto de la \textbf{medición métrica}, la mayor limitación es que el recorte AABB se definió
+manualmente por inspección: sus límites condicionan directamente las dimensiones reportadas, y
+puntos de ruido remanentes dentro de la caja tienden a sobreestimar las extensiones. Además,
+no se dispone de una medida física de referencia del objeto, por lo que no es posible reportar
+un error relativo; las dimensiones obtenidas ($90.0\times380.0\times129.8$~mm) deben tomarse como
+una estimación cuya validación requeriría contrastar una distancia conocida sobre la
+reconstrucción.
+
+Como \textbf{mejoras} futuras se plantean: incorporar ICP para refinar el registro entre nubes,
+explorar métodos de \textit{stereo matching} basados en redes neuronales (CREStereo, HITNet)
+para densificar y limpiar la disparidad, aumentar el solapamiento y la cobertura de las capturas
+para cerrar la parte trasera del objeto, y validar empíricamente la escala midiendo el objeto
+real para cuantificar el error de la reconstrucción.
 
 \begin{thebibliography}{9}
 \footnotesize

@@ -1,4 +1,4 @@
-# TP2 - Reconstruccion 3D. Python 3.10-3.13 (macOS Apple Silicon).
+# TP2 - Reconstruccion 3D. Entorno probado: Python 3.13.7 (compatible 3.10-3.13).
 # Instalar desde la raiz: python -m pip install -r requirements.txt
 
 # Calibracion, rectificacion, disparidad y deteccion ArUco/ChArUco.
