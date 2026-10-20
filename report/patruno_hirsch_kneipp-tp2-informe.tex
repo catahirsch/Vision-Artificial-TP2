@@ -115,7 +115,7 @@ Aquí, $f_x$ y $f_y$ son las distancias focales expresadas en píxeles
 en las direcciones horizontal y vertical, respectivamente; $c_x$ y
 $c_y$ son las coordenadas del punto principal, donde el eje óptico
 intersecta el plano imagen; y $\gamma$ representa el parámetro de
-sesgo (*skew*) entre los ejes de la imagen, que habitualmente se
+sesgo \emph{skew} entre los ejes de la imagen, que habitualmente se
 asume nulo.
 
 El modelo pinhole ideal no contempla que las lentes reales deforman la imagen. Esto se corrige
@@ -125,8 +125,7 @@ rectas (efecto barril o cojín), notoria en lentes de cámara web como la de est
 
 Tanto $K$ como los coeficientes de distorsión son desconocidos y propios de cada cámara. Sin
 ellos no se puede relacionar los píxeles con la geometría real ni obtener medidas en milímetros.
-Por eso es necesario calibrar: estimarlos a partir de un patrón de geometría conocida. Es el
-cimiento métrico del pipeline, ya que un error en esta etapa se propaga al resto.
+Por eso es necesario calibrar, estimando los parámetros a partir de un patrón de geometría conocida.
 
 \subsection{Calibración estéreo}
 
@@ -141,7 +140,8 @@ optimización (\texttt{stereoCalibrate}) que halla el $R$, $t$ consistente con t
 
 La calidad se mide con el error de reproyección: se reproyectan los puntos 3D del patrón al plano
 imagen con los parámetros estimados y se mide, en píxeles, la distancia a las esquinas
-detectadas, reportada como raíz cuadrática media (RMS); cuanto más bajo, mejor.
+detectadas, reportada como raíz cuadrática media (RMS); 
+se considera que cuanto más bajo el valor, mejor calidad de la calibración.
 
 \begin{equation}\label{eq:rms}
 e_{\text{RMS}} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\left\lVert \mathbf{x}_i - \hat{\mathbf{x}}_i \right\rVert^2}
@@ -192,7 +192,7 @@ local.
 \section{Metodología}
 
 El pipeline implementado parte de la calibración y rectificación del par estéreo, calcula la
-disparidad de cada par y la retroproyecta a una nube de puntos local, estima la pose global de cada
+disparidad de cada par y la retroproyecta a una nube de puntos local. Luego, estima la pose global de cada
 cámara respecto de un marco de referencia común para fusionar todas las nubes, y finalmente optimiza
 la nube resultante y mide el objeto. A continuación se describe cada etapa con las técnicas y
 parámetros utilizados.
@@ -392,9 +392,9 @@ marcado con líneas rojas punteadas.
 % - Disparidad: mapa de disparidad de un par representativo, nube local.
 \subsubsection{Disparidad}
 A continuación se muestra el mapa de disparidad, que contiene información sobre la
-diferencia de pixeles sobre el eje horizontal entre 2 imagenes rectificadas. A mayor
-claridad del pixel, más cerca se encuentre ese punto 3D de la camara estereo, a menor 
-intensidad se encuentra más lejos. 
+diferencia de pixeles en el eje horizontal entre 2 imagenes rectificadas. A mayor
+claridad del pixel, más cerca se encuentra ese punto 3D de la camara estereo, a menor
+intensidad, se encuentra más lejos.
 
 \begin{figure}[H]
     \centering
@@ -444,7 +444,7 @@ de esquinas y en el éxito de \texttt{solvePnP}, por lo que la precisión de las
 poses puede variar entre capturas y afectar el empalme de las nubes.
 
 \subsubsection{Nube global y optimización}
-La fusión de los 70 pares produjo una nube global de 17\,703\,320 puntos, aun
+La fusión de los 70 pares produjo una nube global de 17\,703\,320 puntos, aún
 después del submuestreo de 2 mm aplicado durante la acumulación. Como se observa
 en la Figura~\ref{fig:nube_global}, esta nube incluye tanto la maqueta como partes
 del tablero y del entorno capturado. Por ello, el primer paso de optimización fue
@@ -541,7 +541,7 @@ lo que esta coincidencia no valida de forma independiente el tamaño real del ob
 \subsection{Discusión}
 
 Los resultados muestran que el pipeline reconstruye la geometría general del objeto con
-escala métrica coherente, pero también revelan varias limitaciones. En la
+escala métrica coherente, pero también revelan ciertas limitaciones. En la
 \textbf{calibración}, si bien los RMS agregados son subpíxel, los pares 42 y 52 presentan
 errores de reproyección cercanos a 2.3~px y de alineación vertical superiores a 1~px.
 Estos residuos, aunque toleran el umbral de filtrado, introducen una rectificación menos
