@@ -283,6 +283,12 @@ mediante \texttt{remove\_statistical\_outlier}, utilizando \texttt{nb\_neighbors
 Se registró la cantidad de puntos después de cada operación y se calcularon las dimensiones de la nube resultante 
 mediante una AABB y una caja envolvente orientada (\textit{Oriented Bounding Box}, OBB).
 
+Como exploración opcional, se reconstruyó una superficie mediante Poisson sobre la nube
+optimizada. Se estimaron normales con radio de 5 mm y hasta 30 vecinos, y se orientaron
+consistentemente con 30 vecinos. La reconstrucción se ejecutó con profundidad 8 y un hilo;
+luego se eliminaron los vértices con densidad inferior al percentil 3 y se recortó la malla
+a la AABB de la nube final.
+
 \subsection{Medición métrica}
 Las dimensiones del objeto se estimaron a partir de las extensiones de las cajas AABB y OBB calculadas sobre la nube final. 
 La AABB mide las dimensiones respecto de los ejes globales, mientras que la OBB permite considerar la orientación de la nube 
@@ -555,16 +561,19 @@ El \textbf{empalme} de las nubes es sensible a la calidad de las poses: el RMS d
 de las esquinas ChArUco tuvo una mediana de 1.80~px y un máximo de 4.36~px, y pequeños errores
 angulares desplazan las nubes lejanas, engrosando las superficies al acumularlas. No se aplicó
 un refinamiento posterior (ICP), que podría alinear mejor las nubes parciales y reducir el
-espesor aparente. Como exploración adicional se reconstruyó una malla de superficie con el
-método de Poisson (Figura~\ref{fig:malla_poisson}); recupera un volumen cerrado reconocible,
-pero cierra huecos de zonas no observadas con superficies interpoladas, por lo que se la
-reporta solo como resultado cualitativo.
+espesor aparente. La exploración con Poisson produjo una malla de 241\,821 vértices y
+487\,498 triángulos después del filtrado por densidad y el recorte
+(Figura~\ref{fig:malla_poisson}), exportada como \texttt{malla\_palacio\_poisson.ply}.
+La superficie conserva la forma alargada de la región seleccionada, pero presenta huecos,
+fragmentos e irregularidades; no se obtuvo una superficie cerrada. Además, Poisson puede
+interpolar zonas no observadas, por lo que se reporta solo como resultado cualitativo.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.78\linewidth,trim=475 35 475 35,clip]{report_images/palacio_malla_poisson.png}
     \caption{Malla triangular obtenida con Poisson Surface Reconstruction a partir de la
-    nube optimizada (exploración opcional).}
+    nube optimizada, con profundidad 8, filtrado por densidad y recorte a su AABB
+    (exploración opcional). Persisten huecos e irregularidades.}
     \label{fig:malla_poisson}
 \end{figure}
 
