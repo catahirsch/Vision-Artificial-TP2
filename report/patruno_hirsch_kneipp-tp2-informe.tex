@@ -52,14 +52,15 @@ métrica por estéreo multivista\par}
 \noindent
 Se presenta un pipeline de reconstrucción 3D por estéreo multivista que, a partir de
 pares RGB capturados con una cámara estéreo, recupera la nube de puntos de un objeto
-y estima sus dimensiones métricas reales. El sistema se calibró manualmente con OpenCV
+y estima sus dimensiones en una escala métrica nominal. El sistema se calibró manualmente con OpenCV
 (error de reproyección estéreo RMS de $0.86$~px y línea base de $60.16$~mm), se calculó
 la disparidad con \texttt{StereoSGBM} y filtrado WLS, y se fusionaron las nubes locales
 en un marco común mediante poses estimadas respecto de un tablero ChArUco con
 \texttt{solvePnP}. Tras el filtrado espacial, submuestreo y eliminación de outliers en
-Open3D, la nube final conserva $154\,651$ puntos ($4.18$~MB) y, aislando el objeto por
-agrupamiento, arroja dimensiones de $90.0\times380.0\times120.6$~mm. Se discuten las
-limitaciones del empalme y la medición.
+Open3D, la nube final conserva $202\,741$ puntos ($5.47$~MB). Tras una segmentación por
+agrupamiento, la región seleccionada presenta extensiones de $90.0\times380.0\times117.8$~mm,
+provisionales por el recorte y la falta de validación física de la escala.
+Se discuten las limitaciones del empalme y la medición.
 \end{abstract}
 
 \begin{multicols}{2}
@@ -136,8 +137,9 @@ profundidad: el módulo de $t$ es la línea base (\emph{baseline} $B$), que entr
 
 Para estimarlos se toman pares de imágenes de un patrón (checkerboard/ChArUco) de geometría
 conocida vistos por ambas cámaras a la vez, se detectan sus esquinas y se resuelve una
-optimización (\texttt{stereoCalibrate}) que halla el $R$, $t$ consistente con todas las vistas
-(y afina intrínsecos y distorsión).
+optimización (\texttt{stereoCalibrate}) que halla el $R$, $t$ consistente con todas las vistas.
+En este trabajo, los intrínsecos y la distorsión se estiman previamente por cámara y se
+mantienen fijos durante la calibración estéreo.
 
 La calidad se mide con el error de reproyección: se reproyectan los puntos 3D del patrón al plano
 imagen con los parámetros estimados y se mide, en píxeles, la distancia a las esquinas
@@ -281,8 +283,9 @@ alineada con los ejes (\textit{Axis-Aligned Bounding Box}, AABB), con límites $
 $\mathbf{b}_{\max}=(220,470,0)$ mm. Estos límites se definieron a partir de la inspección de la nube global. 
 Sobre la región seleccionada se aplicó una nueva reducción por vóxeles de $1.5$ mm y se eliminaron valores atípicos 
 mediante \texttt{remove\_statistical\_outlier}, utilizando \texttt{nb\_neighbors}$=20$ y \texttt{std\_ratio}$=1.5$. 
-Se registró la cantidad de puntos después de cada operación y se calcularon las dimensiones de la nube resultante 
-mediante una AABB y una caja envolvente orientada (\textit{Oriented Bounding Box}, OBB).
+Se registró la cantidad de puntos después de cada operación. Para la medición se aplicó
+una segmentación adicional antes de calcular la AABB y la caja envolvente orientada
+(\textit{Oriented Bounding Box}, OBB).
 
 Como exploración opcional, se reconstruyó una superficie mediante Poisson sobre la nube
 optimizada. Se estimaron normales con radio de 5 mm y hasta 30 vecinos, y se orientaron
@@ -291,7 +294,10 @@ luego se eliminaron los vértices con densidad inferior al percentil 3 y se reco
 a la AABB de la nube final.
 
 \subsection{Medición métrica}
-Las dimensiones del objeto se estimaron a partir de las extensiones de las cajas AABB y OBB calculadas sobre la nube final. 
+Las dimensiones se estimaron a partir de las extensiones de las cajas AABB y OBB de una región segmentada de la nube final.
+Se conservaron los puntos con $Z<-12$ mm y el mayor grupo obtenido con DBSCAN
+($\varepsilon=4$ mm, 15 puntos mínimos). Esta selección busca separar el palacio del entorno,
+pero no garantiza recuperar su contorno completo.
 La AABB mide las dimensiones respecto de los ejes globales, mientras que la OBB permite considerar la orientación de la nube 
 para obtener una estimación complementaria del tamaño del objeto.
 
@@ -301,6 +307,8 @@ Por su parte, la pose global se estima a partir de las dimensiones conocidas del
 $42$ mm de lado. Para que las nubes locales y las poses sean compatibles, las unidades utilizadas en ambas calibraciones deben 
 ser consistentes. Las dimensiones obtenidas se interpretan como estimaciones del tamaño del objeto y su precisión depende de la 
 calibración, la calidad de las disparidades, la estimación de las poses y los filtros aplicados.
+Los tamaños de 28 mm del checkerboard y 42 mm del ChArUco son los valores configurados;
+su comprobación física y la validación con una distancia conocida quedan pendientes.
 
 \section{Resultados y Discusión}
 
@@ -449,7 +457,7 @@ de esquinas y en el éxito de \texttt{solvePnP}, por lo que la precisión de las
 poses puede variar entre capturas y afectar el empalme de las nubes.
 
 \subsubsection{Nube global y optimización}
-La fusión de los 70 pares produjo una nube global de 20\,762\,218 puntos, aún
+La fusión de los 70 pares produjo una nube global de 17\,703\,320 puntos, aún
 después del submuestreo de 2 mm aplicado durante la acumulación. Como se observa
 en la Figura~\ref{fig:nube_global}, esta nube incluye tanto la maqueta como partes
 del tablero y del entorno capturado. Por ello, el primer paso de optimización fue
@@ -464,9 +472,9 @@ seleccionar espacialmente la región del objeto.
 \end{figure}
 
 La Tabla~\ref{tab:optimizacion} resume la cantidad de puntos conservados en cada
-etapa. El recorte AABB dejó 172\,984 puntos; el submuestreo con vóxeles de 1.5 mm
-los redujo a 165\,668 y el filtro estadístico, con 20 vecinos y
-\texttt{std\_ratio}$=1.5$, produjo los 154\,651 puntos de la nube final.
+etapa. El recorte AABB dejó 225\,228 puntos; el submuestreo con vóxeles de 1.5 mm
+los redujo a 214\,977 y el filtro estadístico, con 20 vecinos y
+\texttt{std\_ratio}$=1.5$, produjo los 202\,741 puntos de la nube final.
 
 \begin{table}[H]
     \centering
@@ -476,10 +484,10 @@ los redujo a 165\,668 y el filtro estadístico, con 20 vecinos y
         \toprule
         \textbf{Etapa} & \textbf{Puntos} & \textbf{\% inicial} \\
         \midrule
-        Global fusionada & 20\,762\,218 & 100.000 \\
-        Recorte AABB     &    172\,984 &   0.833 \\
-        Vóxel de 1.5 mm   &    165\,668 &   0.798 \\
-        Filtro estadístico &  154\,651 &   0.745 \\
+        Global fusionada & 17\,703\,320 & 100.000 \\
+        Recorte AABB     &    225\,228 &   1.272 \\
+        Vóxel de 1.5 mm   &    214\,977 &   1.214 \\
+        Filtro estadístico &  202\,741 &   1.145 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -508,57 +516,58 @@ los redujo a 165\,668 y el filtro estadístico, con 20 vecinos y
 \end{figure}
 
 \begin{samepage}
-La reducción total fue del 99.26\% de los puntos de la nube global. La mayor parte
+La reducción total fue del 98.85\% de los puntos de la nube global. La mayor parte
 corresponde a la exclusión espacial del entorno; dentro del recorte, los pasos de
-vóxeles y filtrado eliminaron 7\,316 y 11\,017 puntos, respectivamente. La
+vóxeles y filtrado eliminaron 10\,251 y 12\,236 puntos, respectivamente. La
 Figura~\ref{fig:etapas_optimizacion} permite reconocer el volumen general de la
 maqueta, aunque persisten irregularidades en las superficies. La nube optimizada
 se exportó como \texttt{nube\_palacio\_optimizada.ply} en formato binario, con un
-tamaño de 4.18 MB. Este peso, por debajo del orden de decenas de MB, es consecuencia
-de que el objeto ocupa una región acotada y de que la nube quedó compacta tras el
-recorte, el submuestreo y el filtrado; es señal de una optimización efectiva y no de
-una pérdida de información del objeto.\par
+tamaño de 5.47 MB. Este peso es consecuencia de la selección de una región acotada,
+el submuestreo y el filtrado. El tamaño compacto facilita la entrega, pero por sí solo
+no permite asegurar que se haya conservado toda la geometría del objeto.\par
 \end{samepage}
 
 \subsubsection{Medición métrica}
 Medir la AABB directamente sobre la nube recortada no estima el objeto sino la caja
 de recorte: el tablero y el fondo forman una superficie continua que llena el recorte,
 de modo que sus extensiones en $X$ e $Y$ quedan fijadas por los límites de la caja. Para
-que el \emph{objeto} defina el tamaño, se aisló el palacio sobre la nube final: se
-eliminó el plano del tablero (puntos con $Z\ge-12$ mm, pues el tablero--mundo está en
-$Z\approx0$) y se tomó el mayor grupo conexo mediante \texttt{cluster\_dbscan}
-($\varepsilon=4$ mm, \texttt{min\_points}$=15$), que retiene $136\,894$ puntos
-($88.5\%$ de la nube final). Sobre ese grupo se calcularon la AABB en los ejes del
+aproximar la región del palacio, se excluyó la franja próxima al tablero (puntos con
+$Z\ge-12$ mm, pues el tablero--mundo está en $Z\approx0$) y se tomó el mayor grupo
+mediante \texttt{cluster\_dbscan}
+($\varepsilon=4$ mm, \texttt{min\_points}$=15$), que retiene $186\,074$ puntos
+($91.8\%$ de la nube final). Sobre ese grupo se calcularon la AABB en los ejes del
 tablero y, como estimación robusta a puntos sueltos, la extensión entre los percentiles
 $0.5$ y $99.5$ por eje. La Tabla~\ref{tab:mediciones} resume ambas, redondeadas a 0.1 mm;
 este redondeo expresa la presentación numérica, no la precisión física del método.
 
 \begin{table}[H]
     \centering
-    \caption{Dimensiones del palacio aislado (mayor grupo conexo, sin el plano del
-    tablero). Holgura: distancia del extremo del objeto al límite del recorte.}
+    \caption{Extensiones de la región segmentada (mayor grupo DBSCAN con $Z<-12$ mm).
+    Holgura: menor distancia a las caras de la caja inicial, sin considerar el corte adicional en $Z$.}
     \label{tab:mediciones}
     \begin{tabular}{lccc}
         \toprule
-        \textbf{Dimensión} & \textbf{AABB (mm)} & \textbf{$p_{0.5}$--$p_{99.5}$ (mm)} & \textbf{Holgura (mm)} \\
+        \textbf{Dimensión} & \shortstack{\textbf{AABB}\\(mm)} & \shortstack{$p_{0.5}$--$p_{99.5}$\\(mm)} & \shortstack{\textbf{Holgura}\\(mm)} \\
         \midrule
-        Ancho ($X$) & 90.0  & 88.2  & 0.0 \\
-        Largo ($Y$) & 380.0 & 368.0 & 0.0 \\
-        Alto ($Z$)  & 120.6 & 108.3 & 7.4 \\
+        Ancho ($X$) & 90.0  & 88.3  & 0.0 \\
+        Largo ($Y$) & 380.0 & 374.1 & 0.0 \\
+        Extensión ($Z$) & 117.8 & 108.7 & 10.2 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-La OBB mínima del objeto aislado devolvió $380.0\times120.6\times90.0$ mm, coincidente con
-la AABB. La holgura muestra que el \emph{alto} ya lo define el objeto ($7.4$ y $12.0$ mm a
-los límites), pero el ancho y el largo siguen tocando el recorte (holgura $0.0$ mm); esto se
-discute en la Sección~\ref{sec:discusion}.
+La OBB mínima de la región segmentada devolvió $380.0\times117.8\times90.0$ mm,
+coincidente con la AABB. Aunque hay holguras de $10.2$ y $12.0$ mm en $Z$ respecto
+de la caja inicial, el extremo superior queda en $Z\approx-12$ mm, impuesto por la
+máscara. El ancho y el largo alcanzan los límites del recorte (holgura $0.0$ mm).
+La coincidencia de ambas cajas no valida el contorno; estas limitaciones se
+discuten en la Sección~\ref{sec:discusion}.
 
 \subsection{Discusión}
 \label{sec:discusion}
 
-Los resultados muestran que el pipeline reconstruye la geometría general del objeto con
-escala métrica coherente, pero también revelan ciertas limitaciones. En la
+Los resultados muestran que el pipeline reconstruye una región de la escena con
+escala métrica nominal, pendiente de validación física, y revelan ciertas limitaciones. En la
 \textbf{calibración}, si bien los RMS agregados son subpíxel, los pares 42 y 52 presentan
 errores de reproyección cercanos a 2.3~px y de alineación vertical superiores a 1~px.
 Estos residuos, aunque toleran el umbral de filtrado, introducen una rectificación menos
@@ -590,22 +599,23 @@ resultado cualitativo.
     \label{fig:malla_poisson}
 \end{figure}
 
-Respecto de la \textbf{medición métrica}, aislar el palacio por agrupamiento y descartar el
-plano del tablero hace que el \emph{alto} lo defina el objeto (holgura de $7.4$ y $12.0$ mm a
-los límites del recorte) y no la caja. En cambio, el ancho y el largo siguen limitados por el
-recorte: el tablero y el fondo forman una superficie continua sin un borde libre alrededor del
-objeto, de modo que ampliar la caja solo incorpora entorno y no revela el contorno del palacio
-en $X$ e $Y$. Por eso no puede descartarse un recorte de pocos milímetros en esos ejes. Además,
-no se dispone de una medida física de referencia, por lo que no es posible reportar un error
-relativo; las dimensiones obtenidas ($90.0\times380.0\times120.6$~mm) deben tomarse como una
-estimación. El código deja preparada la variable \texttt{actual\_height\_mm}: al cargar el alto
-real del palacio medido con regla, se calcula y reporta automáticamente el error relativo.
+Respecto de la \textbf{medición métrica}, la extensión vertical de $117.8$ mm corresponde
+al intervalo aproximado $[-129.8,-12.0]$ mm. El corte $Z<-12$ mm puede eliminar parte
+de la base del objeto; la holgura respecto de la caja inicial no demuestra que se haya
+recuperado el alto completo. El ancho y el largo también alcanzan los límites del recorte,
+por lo que no puede descartarse un truncamiento cuya magnitud no se cuantificó. El mayor
+grupo DBSCAN puede seguir incluyendo entorno conectado al objeto. Sin una segmentación
+validada y una medida física de referencia, las extensiones de
+$90.0\times380.0\times117.8$~mm son resultados provisionales de la región seleccionada.
+El código deja preparada la variable \texttt{actual\_height\_mm}: al cargar el alto real,
+se calcula el error relativo respecto de la extensión vertical segmentada, que incluye
+el efecto del corte.
 
 Como \textbf{mejoras} futuras se plantean: incorporar ICP para refinar el registro entre nubes,
 explorar métodos de \textit{stereo matching} basados en redes neuronales (CREStereo, HITNet)
 para densificar y limpiar la disparidad, aumentar el solapamiento y la cobertura de las capturas
-para cerrar la parte trasera del objeto, y validar empíricamente la escala midiendo el objeto
-real para cuantificar el error de la reconstrucción.
+para cerrar la parte trasera del objeto, validar la segmentación y comprobar empíricamente
+la escala con medidas del patrón y del objeto real para cuantificar el error de la reconstrucción.
 
 \begin{thebibliography}{9}
 \footnotesize

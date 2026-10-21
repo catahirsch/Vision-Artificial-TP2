@@ -10,7 +10,7 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 ## Entregable final
 
 - **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
-  4,18 MB y 154.651 puntos en la ejecución actual.
+  5,47 MB y 202.741 puntos en la ejecución actual.
 - **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
 - **Datasets propios incluidos:** [calibración](data/calibration) y
   [Palacio](data/raw/palacio).
@@ -77,9 +77,9 @@ antes de reportar medidas en milímetros. Los RMS y la alineación rectificada
 deben revisarse antes de aceptar la calibración.
 
 El campo `metric_scale.physical_square_size_confirmed` de `metadata.yaml` se
-guarda automáticamente como `True` en la implementación actual; ese valor no
-acredita una comprobación física del patrón. La escala debe validarse midiendo
-el lado del cuadrado impreso y contrastando una distancia conocida con la
+guarda como `False`: no se dispone de una comprobación física documentada del
+patrón. La escala debe validarse midiendo el lado de los cuadrados impresos del
+checkerboard y del ChArUco, y contrastando una distancia conocida con la
 reconstrucción. Hasta realizar esa validación, las medidas en milímetros deben
 considerarse provisionales.
 
@@ -110,10 +110,14 @@ kernel iniciado desde la raíz o desde `notebooks/`.
    `report/report_images/`. Si se cambia de objeto, adaptar también la ruta de
    entrada y la caja de recorte del notebook 03.
 4. **Medición métrica**
-   La última celda del notebook 03 calcula las dimensiones AABB y OBB en
-   milímetros. Configurar `actual_height_mm` si se dispone de una medida física
-   para calcular el error relativo. Las dimensiones actuales son provisionales:
-   hay que validar el recorte antes de aceptarlas como medidas del objeto.
+   El **Paso 5** del notebook 03 aplica la máscara `Z < -12 mm`, selecciona el
+   mayor grupo DBSCAN y calcula sus extensiones AABB, OBB y entre percentiles.
+   Configurar `actual_height_mm` si se dispone de una medida física para
+   calcular el error relativo. Las dimensiones actuales son provisionales:
+   ancho y largo alcanzan el recorte, y la extensión vertical depende de la
+   máscara en Z. Hay que validar la segmentación antes de aceptarlas como
+   medidas completas del objeto. Los pasos 6 y 7 muestran las poses y realizan
+   la exploración opcional de superficie con Poisson.
 
 Después de recalibrar, ejecutar los notebooks 02 y 03 completos para mantener
 coherentes los mapas, las disparidades, las poses y la nube final. Al preparar una
