@@ -57,8 +57,9 @@ y estima sus dimensiones métricas reales. El sistema se calibró manualmente co
 la disparidad con \texttt{StereoSGBM} y filtrado WLS, y se fusionaron las nubes locales
 en un marco común mediante poses estimadas respecto de un tablero ChArUco con
 \texttt{solvePnP}. Tras el filtrado espacial, submuestreo y eliminación de outliers en
-Open3D, la nube final conserva $202\,741$ puntos ($5.47$~MB) y arroja dimensiones de
-$90.0\times380.0\times129.8$~mm. Se discuten las limitaciones del empalme y la medición.
+Open3D, la nube final conserva $154\,651$ puntos ($4.18$~MB) y, aislando el objeto por
+agrupamiento, arroja dimensiones de $90.0\times380.0\times120.6$~mm. Se discuten las
+limitaciones del empalme y la medición.
 \end{abstract}
 
 \begin{multicols}{2}
@@ -448,7 +449,7 @@ de esquinas y en el éxito de \texttt{solvePnP}, por lo que la precisión de las
 poses puede variar entre capturas y afectar el empalme de las nubes.
 
 \subsubsection{Nube global y optimización}
-La fusión de los 70 pares produjo una nube global de 17\,703\,320 puntos, aún
+La fusión de los 70 pares produjo una nube global de 20\,762\,218 puntos, aún
 después del submuestreo de 2 mm aplicado durante la acumulación. Como se observa
 en la Figura~\ref{fig:nube_global}, esta nube incluye tanto la maqueta como partes
 del tablero y del entorno capturado. Por ello, el primer paso de optimización fue
@@ -463,9 +464,9 @@ seleccionar espacialmente la región del objeto.
 \end{figure}
 
 La Tabla~\ref{tab:optimizacion} resume la cantidad de puntos conservados en cada
-etapa. El recorte AABB dejó 225\,228 puntos; el submuestreo con vóxeles de 1.5 mm
-los redujo a 214\,977 y el filtro estadístico, con 20 vecinos y
-\texttt{std\_ratio}$=1.5$, produjo los 202\,741 puntos de la nube final.
+etapa. El recorte AABB dejó 172\,984 puntos; el submuestreo con vóxeles de 1.5 mm
+los redujo a 165\,668 y el filtro estadístico, con 20 vecinos y
+\texttt{std\_ratio}$=1.5$, produjo los 154\,651 puntos de la nube final.
 
 \begin{table}[H]
     \centering
@@ -475,10 +476,10 @@ los redujo a 214\,977 y el filtro estadístico, con 20 vecinos y
         \toprule
         \textbf{Etapa} & \textbf{Puntos} & \textbf{\% inicial} \\
         \midrule
-        Global fusionada & 17\,703\,320 & 100.000 \\
-        Recorte AABB     &    225\,228 &   1.272 \\
-        Vóxel de 1.5 mm   &    214\,977 &   1.214 \\
-        Filtro estadístico &  202\,741 &   1.145 \\
+        Global fusionada & 20\,762\,218 & 100.000 \\
+        Recorte AABB     &    172\,984 &   0.833 \\
+        Vóxel de 1.5 mm   &    165\,668 &   0.798 \\
+        Filtro estadístico &  154\,651 &   0.745 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -507,42 +508,54 @@ los redujo a 214\,977 y el filtro estadístico, con 20 vecinos y
 \end{figure}
 
 \begin{samepage}
-La reducción total fue del 98.85\% de los puntos de la nube global. La mayor parte
+La reducción total fue del 99.26\% de los puntos de la nube global. La mayor parte
 corresponde a la exclusión espacial del entorno; dentro del recorte, los pasos de
-vóxeles y filtrado eliminaron 10\,251 y 12\,236 puntos, respectivamente. La
+vóxeles y filtrado eliminaron 7\,316 y 11\,017 puntos, respectivamente. La
 Figura~\ref{fig:etapas_optimizacion} permite reconocer el volumen general de la
 maqueta, aunque persisten irregularidades en las superficies. La nube optimizada
 se exportó como \texttt{nube\_palacio\_optimizada.ply} en formato binario, con un
-tamaño de 5.47 MB.\par
+tamaño de 4.18 MB. Este peso, por debajo del orden de decenas de MB, es consecuencia
+de que el objeto ocupa una región acotada y de que la nube quedó compacta tras el
+recorte, el submuestreo y el filtrado; es señal de una optimización efectiva y no de
+una pérdida de información del objeto.\par
 \end{samepage}
 
 \subsubsection{Medición métrica}
-Sobre la nube final se calcularon las extensiones de la AABB en los ejes del
-tablero. La Tabla~\ref{tab:mediciones} presenta las dimensiones obtenidas, redondeadas
-a 0.1 mm; este redondeo expresa la presentación numérica, no la precisión física
-del método.
+Medir la AABB directamente sobre la nube recortada no estima el objeto sino la caja
+de recorte: el tablero y el fondo forman una superficie continua que llena el recorte,
+de modo que sus extensiones en $X$ e $Y$ quedan fijadas por los límites de la caja. Para
+que el \emph{objeto} defina el tamaño, se aisló el palacio sobre la nube final: se
+eliminó el plano del tablero (puntos con $Z\ge-12$ mm, pues el tablero--mundo está en
+$Z\approx0$) y se tomó el mayor grupo conexo mediante \texttt{cluster\_dbscan}
+($\varepsilon=4$ mm, \texttt{min\_points}$=15$), que retiene $136\,894$ puntos
+($88.5\%$ de la nube final). Sobre ese grupo se calcularon la AABB en los ejes del
+tablero y, como estimación robusta a puntos sueltos, la extensión entre los percentiles
+$0.5$ y $99.5$ por eje. La Tabla~\ref{tab:mediciones} resume ambas, redondeadas a 0.1 mm;
+este redondeo expresa la presentación numérica, no la precisión física del método.
 
 \begin{table}[H]
     \centering
-    \caption{Dimensiones de la envolvente de la nube final.}
+    \caption{Dimensiones del palacio aislado (mayor grupo conexo, sin el plano del
+    tablero). Holgura: distancia del extremo del objeto al límite del recorte.}
     \label{tab:mediciones}
-    \begin{tabular}{lc}
+    \begin{tabular}{lccc}
         \toprule
-        \textbf{Dimensión AABB} & \textbf{Estimación (mm)} \\
+        \textbf{Dimensión} & \textbf{AABB (mm)} & \textbf{$p_{0.5}$--$p_{99.5}$ (mm)} & \textbf{Holgura (mm)} \\
         \midrule
-        Ancho ($X$) & 90.0 \\
-        Largo ($Y$) & 380.0 \\
-        Alto ($Z$)  & 129.8 \\
+        Ancho ($X$) & 90.0  & 88.2  & 0.0 \\
+        Largo ($Y$) & 380.0 & 368.0 & 0.0 \\
+        Alto ($Z$)  & 120.6 & 108.3 & 7.4 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-La OBB mínima devolvió extensiones de $380.0\times129.8\times90.0$ mm, ordenadas
-de mayor a menor. A la resolución numérica reportada, coinciden con las de la
-AABB. Ambas cajas se calculan sobre el mismo conjunto de puntos retenidos, por
-lo que esta coincidencia no valida de forma independiente el tamaño real del objeto.
+La OBB mínima del objeto aislado devolvió $380.0\times120.6\times90.0$ mm, coincidente con
+la AABB. La holgura muestra que el \emph{alto} ya lo define el objeto ($7.4$ y $12.0$ mm a
+los límites), pero el ancho y el largo siguen tocando el recorte (holgura $0.0$ mm); esto se
+discute en la Sección~\ref{sec:discusion}.
 
 \subsection{Discusión}
+\label{sec:discusion}
 
 Los resultados muestran que el pipeline reconstruye la geometría general del objeto con
 escala métrica coherente, pero también revelan ciertas limitaciones. En la
@@ -561,29 +574,32 @@ El \textbf{empalme} de las nubes es sensible a la calidad de las poses: el RMS d
 de las esquinas ChArUco tuvo una mediana de 1.80~px y un máximo de 4.36~px, y pequeños errores
 angulares desplazan las nubes lejanas, engrosando las superficies al acumularlas. No se aplicó
 un refinamiento posterior (ICP), que podría alinear mejor las nubes parciales y reducir el
-espesor aparente. La exploración con Poisson produjo una malla de 241\,821 vértices y
-487\,498 triángulos después del filtrado por densidad y el recorte
-(Figura~\ref{fig:malla_poisson}), exportada como \texttt{malla\_palacio\_poisson.ply}.
-La superficie conserva la forma alargada de la región seleccionada, pero presenta huecos,
-fragmentos e irregularidades; no se obtuvo una superficie cerrada. Además, Poisson puede
-interpolar zonas no observadas, por lo que se reporta solo como resultado cualitativo.
+espesor aparente. La exploración con Poisson, tras el filtrado por densidad y el recorte a la AABB de la nube
+optimizada (Figura~\ref{fig:malla_poisson}), se exportó como
+\texttt{malla\_palacio\_poisson.ply}. La superficie conserva la forma alargada de la región
+seleccionada, pero presenta huecos, fragmentos e irregularidades; no se obtuvo una superficie
+cerrada. Además, Poisson puede interpolar zonas no observadas, por lo que se reporta solo como
+resultado cualitativo.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.78\linewidth,trim=475 35 475 35,clip]{report_images/palacio_malla_poisson.png}
+    \includegraphics[width=0.5\linewidth,trim=475 35 475 35,clip]{report_images/palacio_malla_poisson.png}
     \caption{Malla triangular obtenida con Poisson Surface Reconstruction a partir de la
     nube optimizada, con profundidad 8, filtrado por densidad y recorte a su AABB
     (exploración opcional). Persisten huecos e irregularidades.}
     \label{fig:malla_poisson}
 \end{figure}
 
-Respecto de la \textbf{medición métrica}, la mayor limitación es que el recorte AABB se definió
-manualmente por inspección: sus límites condicionan directamente las dimensiones reportadas, y
-puntos de ruido remanentes dentro de la caja tienden a sobreestimar las extensiones. Además,
-no se dispone de una medida física de referencia del objeto, por lo que no es posible reportar
-un error relativo; las dimensiones obtenidas ($90.0\times380.0\times129.8$~mm) deben tomarse como
-una estimación cuya validación requeriría contrastar una distancia conocida sobre la
-reconstrucción.
+Respecto de la \textbf{medición métrica}, aislar el palacio por agrupamiento y descartar el
+plano del tablero hace que el \emph{alto} lo defina el objeto (holgura de $7.4$ y $12.0$ mm a
+los límites del recorte) y no la caja. En cambio, el ancho y el largo siguen limitados por el
+recorte: el tablero y el fondo forman una superficie continua sin un borde libre alrededor del
+objeto, de modo que ampliar la caja solo incorpora entorno y no revela el contorno del palacio
+en $X$ e $Y$. Por eso no puede descartarse un recorte de pocos milímetros en esos ejes. Además,
+no se dispone de una medida física de referencia, por lo que no es posible reportar un error
+relativo; las dimensiones obtenidas ($90.0\times380.0\times120.6$~mm) deben tomarse como una
+estimación. El código deja preparada la variable \texttt{actual\_height\_mm}: al cargar el alto
+real del palacio medido con regla, se calcula y reporta automáticamente el error relativo.
 
 Como \textbf{mejoras} futuras se plantean: incorporar ICP para refinar el registro entre nubes,
 explorar métodos de \textit{stereo matching} basados en redes neuronales (CREStereo, HITNet)

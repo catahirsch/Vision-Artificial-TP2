@@ -10,7 +10,7 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 ## Entregable final
 
 - **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
-  5,47 MB y 202.741 puntos en la ejecución actual.
+  4,18 MB y 154.651 puntos en la ejecución actual.
 - **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
 - **Datasets propios incluidos:** [calibración](data/calibration) y
   [Palacio](data/raw/palacio).

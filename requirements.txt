@@ -11,8 +11,5 @@ PyYAML==6.0.3
 open3d==0.20.0
 matplotlib==3.10.6
 
-# Inferencia de los ejemplos CREStereo y HITNet (CPU).
-onnxruntime==1.23.2
-
 # Ejecucion de notebooks desde un editor con soporte Jupyter.
 ipykernel==6.30.1
