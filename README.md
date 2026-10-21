@@ -12,8 +12,8 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 - **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
   5,47 MB y 202.741 puntos en la ejecución actual.
 - **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
-- **Datasets propios incluidos:** [calibración](data/calibration),
-  [Palacio](data/raw/palacio) y [peluche](data/raw/peluche).
+- **Datasets propios incluidos:** [calibración](data/calibration) y
+  [Palacio](data/raw/palacio).
 
 La nube final se conserva en su ubicación original, sin duplicarla en otra
 carpeta. `.gitignore` permite incluir únicamente ese `.ply`; la nube global y las
@@ -27,7 +27,7 @@ file** desde la página del archivo para descargarlo sin bajar todo el proyecto.
 ├── data/                  # fotografías y resultados de calibración
 │   ├── calibration/       # 63 pares del tablero de calibración
 │   ├── calibration_results/ # .pkl, matrices legibles y metadatos
-│   ├── raw/               # palacio (72 pares) y peluche unificado (70 pares)
+│   ├── raw/               # palacio (72 pares estéreo del objeto)
 │   └── processed/palacio/ # nube optimizada incluida; intermedios excluidos
 ├── notebooks/             # calibración, reconstrucción y optimización/medición
 ├── src/                   # código fuente del pipeline (ver abajo)

@@ -223,43 +223,6 @@ def stereo_reprojection_errors(
     return np.asarray(errors)
 
 
-def rms_reprojection_error(
-    object_points: Sequence[np.ndarray],
-    image_points_left: Sequence[np.ndarray],
-    image_points_right: Sequence[np.ndarray],
-    K1: np.ndarray,
-    D1: np.ndarray,
-    K2: np.ndarray,
-    D2: np.ndarray,
-    R: np.ndarray,
-    t: np.ndarray,
-) -> float:
-    """Compute the point-count-weighted RMS of stereo reprojection errors.
-
-    The board pose is estimated from the left image only, so this validation metric
-    differs from the joint RMS reported by stereo calibration.
-
-    Args:
-        object_points: Checkerboard 3D points for each accepted image pair.
-        image_points_left: Detected checkerboard corners in left images.
-        image_points_right: Detected checkerboard corners in right images.
-        K1: Left camera intrinsic matrix.
-        D1: Left camera distortion coefficients.
-        K2: Right camera intrinsic matrix.
-        D2: Right camera distortion coefficients.
-        R: Rotation from the left camera coordinate system to the right.
-        t: Translation from the left camera coordinate system to the right.
-
-    Returns:
-        Stereo validation RMS, in pixels, weighted by the number of points per view.
-    """
-    errors = stereo_reprojection_errors(
-        object_points, image_points_left, image_points_right, K1, D1, K2, D2, R, t
-    )
-    point_counts = np.asarray([len(points) for points in object_points])
-    return float(np.sqrt(np.average(np.mean(errors**2, axis=1), weights=point_counts)))
-
-
 def rectify(
     K1: np.ndarray,
     K2: np.ndarray,

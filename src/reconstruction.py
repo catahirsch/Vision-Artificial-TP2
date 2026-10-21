@@ -30,6 +30,24 @@ def get_pair_index(path: str) -> int:
     return int(os.path.basename(path).split("_")[1].split(".")[0])
 
 
+def disparity_stem(left_path: str) -> str:
+    """Return the disparity file stem for a left image path.
+
+    Map ``left_<n>.jpg`` to ``disp_<n>`` so disparities and their source images
+    share a capture number. Other stems are returned unchanged.
+
+    Args:
+        left_path: Left image path or filename.
+
+    Returns:
+        Stem used for the matching ``disp_<n>.npy`` and ``.png`` files.
+    """
+    stem = os.path.splitext(os.path.basename(left_path))[0]
+    if stem.startswith("left"):
+        stem = "disp" + stem[len("left"):]
+    return stem
+
+
 def build_local_point_cloud(
     left_path: str,
     disparity: np.ndarray,
@@ -347,10 +365,7 @@ def compute_disparities(
         disparity[~valid] = 0.0
 
         # 4. Guardar la disparidad real en píxeles para la reconstrucción.
-        filename = os.path.basename(img_left_path)
-        stem = os.path.splitext(filename)[0]
-        if stem.startswith("left"):
-            stem = "disp" + stem[len("left"):]
+        stem = disparity_stem(img_left_path)
 
         np.save(
             os.path.join(disparity_output_dir, stem + ".npy"),
@@ -462,11 +477,7 @@ def merge_global_point_cloud(
     discarded_pair_count = 0
 
     for left_path in images_left:
-        filename = os.path.basename(left_path)
-        stem = os.path.splitext(filename)[0]
-        if stem.startswith("left"):
-            stem = "disp" + stem[len("left"):]
-
+        stem = disparity_stem(left_path)
         disparity_file_path = os.path.join(disparity_dir, stem + ".npy")
 
         if not os.path.exists(disparity_file_path):

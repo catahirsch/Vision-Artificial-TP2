@@ -354,7 +354,7 @@ def show_rectification_example(
             "The example image size differs from the calibration image size."
         )
     rect_left, rect_right = rectify_image_pair(img_left, img_right, maps)
-    figure = show_rectified_pair(
+    show_rectified_pair(
         img_left,
         img_right,
         rect_left,
