@@ -112,8 +112,15 @@ kernel iniciado desde la raíz o desde `notebooks/`.
 4. **Medición métrica**
    El **Paso 5** del notebook 03 aplica la máscara `Z < -12 mm`, selecciona el
    mayor grupo DBSCAN y calcula sus extensiones AABB, OBB y entre percentiles.
-   Configurar `actual_height_mm` si se dispone de una medida física para
-   calcular el error relativo. Las dimensiones actuales son provisionales:
+   Las medidas físicas del Palacio, tomadas desde la base, son **38 cm de largo,
+   9 cm de ancho y 11,5 cm de alto** (380 × 90 × 115 mm). Están cargadas como
+   `actual_length_mm`, `actual_width_mm` y `actual_height_mm` para calcular
+   las diferencias absolutas y los errores relativos por dimensión. Frente a las
+   extensiones AABB actuales (380,0 × 90,0 × 117,8 mm, en orden largo × ancho × alto),
+   las diferencias son 0,0 mm, 0,0 mm y 2,8 mm, respectivamente; el error relativo
+   del alto es **2,4 %**. La coincidencia en largo y ancho está condicionada por
+   la caja de recorte y no valida por sí sola la reconstrucción.
+   Las dimensiones reconstruidas siguen siendo provisionales:
    ancho y largo alcanzan el recorte, y la extensión vertical depende de la
    máscara en Z. Hay que validar la segmentación antes de aceptarlas como
    medidas completas del objeto. Los pasos 6 y 7 muestran las poses y realizan

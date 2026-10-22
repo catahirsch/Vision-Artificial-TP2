@@ -58,8 +58,10 @@ la disparidad con \texttt{StereoSGBM} y filtrado WLS, y se fusionaron las nubes 
 en un marco común mediante poses estimadas respecto de un tablero ChArUco con
 \texttt{solvePnP}. Tras el filtrado espacial, submuestreo y eliminación de outliers en
 Open3D, la nube final conserva $202\,741$ puntos ($5.47$~MB). Tras una segmentación por
-agrupamiento, la región seleccionada presenta extensiones de $90.0\times380.0\times117.8$~mm,
-provisionales por el recorte y la falta de validación física de la escala.
+agrupamiento, la región seleccionada presenta extensiones de $90.0\times380.0\times117.8$~mm.
+Frente a las medidas físicas desde la base ($90\times380\times115$~mm, en orden ancho, largo y alto),
+la diferencia vertical es de $2.8$~mm ($2.4\%$). Las estimaciones siguen siendo
+provisionales por el recorte y la falta de validación física de los patrones.
 Se discuten las limitaciones del empalme y la medición.
 \end{abstract}
 
@@ -308,7 +310,10 @@ $42$ mm de lado. Para que las nubes locales y las poses sean compatibles, las un
 ser consistentes. Las dimensiones obtenidas se interpretan como estimaciones del tamaño del objeto y su precisión depende de la 
 calibración, la calidad de las disparidades, la estimación de las poses y los filtros aplicados.
 Los tamaños de 28 mm del checkerboard y 42 mm del ChArUco son los valores configurados;
-su comprobación física y la validación con una distancia conocida quedan pendientes.
+su comprobación física queda pendiente. Como referencia independiente se midió el objeto real
+desde la base: $38$ cm de largo, $9$ cm de ancho y $11.5$ cm de alto
+($380\times90\times115$ mm). Estas medidas se usan para comparar las extensiones
+reconstruidas, sin ajustar la escala ni modificar el recorte.
 
 \section{Resultados y Discusión}
 
@@ -539,23 +544,28 @@ mediante \texttt{cluster\_dbscan}
 tablero y, como estimación robusta a puntos sueltos, la extensión entre los percentiles
 $0.5$ y $99.5$ por eje. La Tabla~\ref{tab:mediciones} resume ambas, redondeadas a 0.1 mm;
 este redondeo expresa la presentación numérica, no la precisión física del método.
+Se incluyen las medidas físicas desde la base y el error relativo de la AABB,
+calculado como $100\,|d_{\mathrm{AABB}}-d_{\mathrm{real}}|/d_{\mathrm{real}}$.
 
 \begin{table}[H]
     \centering
-    \caption{Extensiones de la región segmentada (mayor grupo DBSCAN con $Z<-12$ mm).
-    Holgura: menor distancia a las caras de la caja inicial, sin considerar el corte adicional en $Z$.}
+    \caption{Extensiones de la región segmentada (mayor grupo DBSCAN con $Z<-12$ mm)
+    frente al objeto real medido desde la base. Dimensiones en mm; error relativo en \%.}
     \label{tab:mediciones}
-    \begin{tabular}{lccc}
+    \begin{tabular}{lcccc}
         \toprule
-        \textbf{Dimensión} & \shortstack{\textbf{AABB}\\(mm)} & \shortstack{$p_{0.5}$--$p_{99.5}$\\(mm)} & \shortstack{\textbf{Holgura}\\(mm)} \\
+        \textbf{Dimensión} & \textbf{Real} & \textbf{AABB} & $p_{0.5}$--$p_{99.5}$ & \shortstack{\textbf{Error}\\(\%)} \\
         \midrule
-        Ancho ($X$) & 90.0  & 88.3  & 0.0 \\
-        Largo ($Y$) & 380.0 & 374.1 & 0.0 \\
-        Extensión ($Z$) & 117.8 & 108.7 & 10.2 \\
+        Ancho ($X$) & 90.0  & 90.0  & 88.3  & 0.0 \\
+        Largo ($Y$) & 380.0 & 380.0 & 374.1 & 0.0 \\
+        Alto ($Z$)  & 115.0 & 117.8 & 108.7 & 2.4 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
+Las diferencias absolutas respecto del objeto real fueron $0.0$ mm en largo,
+$0.0$ mm en ancho y $2.8$ mm en alto, con errores relativos de $0.0\%$,
+$0.0\%$ y $2.4\%$, respectivamente, calculados con las extensiones redondeadas.
 La OBB mínima de la región segmentada devolvió $380.0\times117.8\times90.0$ mm,
 coincidente con la AABB. Aunque hay holguras de $10.2$ y $12.0$ mm en $Z$ respecto
 de la caja inicial, el extremo superior queda en $Z\approx-12$ mm, impuesto por la
@@ -567,7 +577,8 @@ discuten en la Sección~\ref{sec:discusion}.
 \label{sec:discusion}
 
 Los resultados muestran que el pipeline reconstruye una región de la escena con
-escala métrica nominal, pendiente de validación física, y revelan ciertas limitaciones. En la
+escala métrica nominal, contrastada con las medidas del objeto pero aún pendiente de
+validación física de los patrones, y revelan ciertas limitaciones. En la
 \textbf{calibración}, si bien los RMS agregados son subpíxel, los pares 42 y 52 presentan
 errores de reproyección cercanos a 2.3~px y de alineación vertical superiores a 1~px.
 Estos residuos, aunque toleran el umbral de filtrado, introducen una rectificación menos
@@ -585,10 +596,29 @@ angulares desplazan las nubes lejanas, engrosando las superficies al acumularlas
 un refinamiento posterior (ICP), que podría alinear mejor las nubes parciales y reducir el
 espesor aparente. La exploración con Poisson, tras el filtrado por densidad y el recorte a la AABB de la nube
 optimizada (Figura~\ref{fig:malla_poisson}), se exportó como
-\texttt{malla\_palacio\_poisson.ply}. La superficie conserva la forma alargada de la región
+\texttt{malla\_palacio\_poisson.ply}, con $241\,821$ vértices y $487\,498$ triángulos.
+La superficie conserva la forma alargada de la región
 seleccionada, pero presenta huecos, fragmentos e irregularidades; no se obtuvo una superficie
 cerrada. Además, Poisson puede interpolar zonas no observadas, por lo que se reporta solo como
 resultado cualitativo.
+
+Respecto de la \textbf{medición métrica}, la extensión vertical de $117.8$ mm corresponde
+al intervalo aproximado $[-129.8,-12.0]$ mm. Frente al alto físico de $115$ mm medido
+desde la base, la diferencia es de $2.8$ mm ($2.4\%$). El corte $Z<-12$ mm puede
+eliminar parte de la base, y el mayor grupo DBSCAN puede incluir entorno conectado;
+por ello, esta comparación no demuestra que se haya recuperado el alto completo.
+El ancho y el largo coinciden con las medidas reales de $90$ y $380$ mm al redondear,
+pero también alcanzan los límites del recorte. Los errores nulos no validan esas
+dimensiones. Sin una segmentación validada, las extensiones siguen siendo provisionales.
+El notebook incorpora las tres medidas físicas y calcula las diferencias absolutas y
+los errores relativos por dimensión.
+
+Como \textbf{mejoras} futuras se plantean: incorporar ICP para refinar el registro entre nubes,
+explorar métodos de \textit{stereo matching} basados en redes neuronales (CREStereo, HITNet)
+para densificar y limpiar la disparidad, aumentar el solapamiento y la cobertura de las capturas
+para cerrar la parte trasera del objeto, validar la segmentación y comprobar empíricamente
+la escala con medidas de los patrones, además de repetir la comparación con el objeto
+real tras validar la segmentación, para cuantificar el error de la reconstrucción.
 
 \begin{figure}[H]
     \centering
@@ -598,24 +628,6 @@ resultado cualitativo.
     (exploración opcional). Persisten huecos e irregularidades.}
     \label{fig:malla_poisson}
 \end{figure}
-
-Respecto de la \textbf{medición métrica}, la extensión vertical de $117.8$ mm corresponde
-al intervalo aproximado $[-129.8,-12.0]$ mm. El corte $Z<-12$ mm puede eliminar parte
-de la base del objeto; la holgura respecto de la caja inicial no demuestra que se haya
-recuperado el alto completo. El ancho y el largo también alcanzan los límites del recorte,
-por lo que no puede descartarse un truncamiento cuya magnitud no se cuantificó. El mayor
-grupo DBSCAN puede seguir incluyendo entorno conectado al objeto. Sin una segmentación
-validada y una medida física de referencia, las extensiones de
-$90.0\times380.0\times117.8$~mm son resultados provisionales de la región seleccionada.
-El código deja preparada la variable \texttt{actual\_height\_mm}: al cargar el alto real,
-se calcula el error relativo respecto de la extensión vertical segmentada, que incluye
-el efecto del corte.
-
-Como \textbf{mejoras} futuras se plantean: incorporar ICP para refinar el registro entre nubes,
-explorar métodos de \textit{stereo matching} basados en redes neuronales (CREStereo, HITNet)
-para densificar y limpiar la disparidad, aumentar el solapamiento y la cobertura de las capturas
-para cerrar la parte trasera del objeto, validar la segmentación y comprobar empíricamente
-la escala con medidas del patrón y del objeto real para cuantificar el error de la reconstrucción.
 
 \begin{thebibliography}{9}
 \footnotesize
