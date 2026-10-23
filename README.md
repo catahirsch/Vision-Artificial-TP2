@@ -115,15 +115,17 @@ kernel iniciado desde la raíz o desde `notebooks/`.
    El **Paso 5** del notebook 03 mide el objeto ya aislado por su extensión robusta
    entre percentiles 0,5–99,5 (principal), con la AABB y la OBB como complemento.
    Las medidas físicas del Palacio, tomadas desde la base, son **38 cm de largo,
-   9 cm de ancho y 11,5 cm de alto** (380 × 90 × 115 mm), cargadas como
+   12 cm de ancho y 11,5 cm de alto** (380 × 120 × 115 mm), cargadas como
    `actual_length_mm`, `actual_width_mm` y `actual_height_mm`. La caja de recorte se
    eligió holgada: la AABB del objeto deja holgura clara en los tres ejes
    (16,4/17,3 mm en X, 10,5/16,1 mm en Y, 6,5/12,0 mm en Z), por lo que la medición
    **no depende del recorte**. Las extensiones robustas actuales son
-   **108,4 × 371,7 × 108,4 mm** (ancho × largo × alto): el largo y el alto
-   reconstruyen con **2,2 %** y **5,7 %** de error, mientras que el ancho se
-   **sobreestima ~20,4 %** por el engrosamiento lateral de la dimensión más angosta
-   (ruido de disparidad y errores de pose). La escala sigue pendiente de validación
+   **108,4 × 371,7 × 108,4 mm** (ancho × largo × alto): las tres **subestiman**
+   levemente el objeto (largo **2,2 %**, alto **5,7 %**, ancho **9,7 %**), siendo el
+   ancho —la dimensión más angosta— la peor estimada; la AABB, en cambio, las
+   **sobreestima** por el engrosamiento lateral (ruido de disparidad y errores de
+   pose), de modo que el ancho real (120 mm) queda acotado entre la robusta (108,4 mm)
+   y la AABB (146,3 mm). La escala sigue pendiente de validación
    física de los patrones. Los pasos 6 y 7 muestran las poses y realizan
    la exploración opcional de superficie con Poisson.
 
