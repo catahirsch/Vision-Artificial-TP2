@@ -10,7 +10,7 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 ## Entregable final
 
 - **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
-  5,47 MB y 202.741 puntos en la ejecución actual.
+  4,2 MB y 155.401 puntos (objeto segmentado) en la ejecución actual.
 - **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
 - **Datasets propios incluidos:** [calibración](data/calibration) y
   [Palacio](data/raw/palacio).
@@ -103,27 +103,28 @@ kernel iniciado desde la raíz o desde `notebooks/`.
 3. **Fusión y optimización de la nube + export `.ply`**
    La fusión se realiza al final del notebook 02. Luego ejecutar
    [notebooks/03_optimization_measurement.ipynb](notebooks/03_optimization_measurement.ipynb):
-   carga la nube global, aplica el recorte espacial, submuestreo de 1,5 mm y
-   eliminación estadística de outliers (`nb_neighbors=20`, `std_ratio=1.5`).
-   Exporta la nube binaria a
+   carga la nube global, aplica el recorte espacial (caja holgada
+   `[90, 55, -140]`–`[270, 500, 0]` mm), submuestreo de 1,5 mm y
+   eliminación estadística de outliers (`nb_neighbors=20`, `std_ratio=1.5`), y
+   finalmente segmenta el objeto (máscara `Z < -12 mm` + mayor grupo DBSCAN).
+   Exporta la nube del objeto a
    `data/processed/palacio/nube_palacio_optimizada.ply` y guarda las figuras en
    `report/report_images/`. Si se cambia de objeto, adaptar también la ruta de
    entrada y la caja de recorte del notebook 03.
 4. **Medición métrica**
-   El **Paso 5** del notebook 03 aplica la máscara `Z < -12 mm`, selecciona el
-   mayor grupo DBSCAN y calcula sus extensiones AABB, OBB y entre percentiles.
+   El **Paso 5** del notebook 03 mide el objeto ya aislado por su extensión robusta
+   entre percentiles 0,5–99,5 (principal), con la AABB y la OBB como complemento.
    Las medidas físicas del Palacio, tomadas desde la base, son **38 cm de largo,
-   9 cm de ancho y 11,5 cm de alto** (380 × 90 × 115 mm). Están cargadas como
-   `actual_length_mm`, `actual_width_mm` y `actual_height_mm` para calcular
-   las diferencias absolutas y los errores relativos por dimensión. Frente a las
-   extensiones AABB actuales (380,0 × 90,0 × 117,8 mm, en orden largo × ancho × alto),
-   las diferencias son 0,0 mm, 0,0 mm y 2,8 mm, respectivamente; el error relativo
-   del alto es **2,4 %**. La coincidencia en largo y ancho está condicionada por
-   la caja de recorte y no valida por sí sola la reconstrucción.
-   Las dimensiones reconstruidas siguen siendo provisionales:
-   ancho y largo alcanzan el recorte, y la extensión vertical depende de la
-   máscara en Z. Hay que validar la segmentación antes de aceptarlas como
-   medidas completas del objeto. Los pasos 6 y 7 muestran las poses y realizan
+   9 cm de ancho y 11,5 cm de alto** (380 × 90 × 115 mm), cargadas como
+   `actual_length_mm`, `actual_width_mm` y `actual_height_mm`. La caja de recorte se
+   eligió holgada: la AABB del objeto deja holgura clara en los tres ejes
+   (16,4/17,3 mm en X, 10,5/16,1 mm en Y, 6,5/12,0 mm en Z), por lo que la medición
+   **no depende del recorte**. Las extensiones robustas actuales son
+   **108,4 × 371,7 × 108,4 mm** (ancho × largo × alto): el largo y el alto
+   reconstruyen con **2,2 %** y **5,7 %** de error, mientras que el ancho se
+   **sobreestima ~20,4 %** por el engrosamiento lateral de la dimensión más angosta
+   (ruido de disparidad y errores de pose). La escala sigue pendiente de validación
+   física de los patrones. Los pasos 6 y 7 muestran las poses y realizan
    la exploración opcional de superficie con Poisson.
 
 Después de recalibrar, ejecutar los notebooks 02 y 03 completos para mantener
