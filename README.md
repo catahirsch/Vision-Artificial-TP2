@@ -9,26 +9,28 @@ puntos 3D de un objeto y estimar sus dimensiones métricas reales, usando
 
 ## Entregable final
 
-- **[Descargar la nube del Palacio optimizada (`.ply` binario)](data/processed/palacio/nube_palacio_optimizada.ply?raw=true)**:
-  4,2 MB y 155.401 puntos (objeto segmentado) en la ejecución actual.
-- **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)**.
-- **Datasets propios incluidos:** [calibración](data/calibration) y
-  [Palacio](data/raw/palacio).
+- **Nube del Palacio optimizada (`.ply` binario):**
+  [`data/processed/palacio/nube_palacio_optimizada.ply`](data/processed/palacio/nube_palacio_optimizada.ply),
+  **incluida en este entregable** (4,2 MB, 155.401 puntos del objeto segmentado).
+- **[Informe PDF](report/patruno_hirsch_kneipp-tp2-informe.pdf)** — incluido.
+- **Dataset de imágenes propio (Google Drive):**
+  [carpeta pública](https://drive.google.com/drive/folders/12rf3tCLWvMRrGbgWVxk7QTSbeLpmx9QJ?usp=sharing)
+  con los pares de calibración y del Palacio. Por su peso (~87 MB) **no se incluye**
+  en el entregable; ver la sección [Dataset](#dataset) para descargarlo y ubicarlo.
 
-La nube final se conserva en su ubicación original, sin duplicarla en otra
-carpeta. `.gitignore` permite incluir únicamente ese `.ply`; la nube global y las
-disparidades siguen excluidas. En GitHub también se puede usar **Download raw
-file** desde la página del archivo para descargarlo sin bajar todo el proyecto.
+Los archivos de proceso intermedio pesados (la nube global sin optimizar, las
+disparidades y la malla Poisson) se excluyen del entregable; sólo se incluye la
+nube optimizada final.
 
 ## Estructura del repositorio
 
 ```
 .
-├── data/                  # fotografías y resultados de calibración
-│   ├── calibration/       # 63 pares del tablero de calibración
+├── data/                  # resultados de calibración y nube final
 │   ├── calibration_results/ # .pkl, matrices legibles y metadatos
-│   ├── raw/               # palacio (72 pares estéreo del objeto)
 │   └── processed/palacio/ # nube optimizada incluida; intermedios excluidos
+│   # calibration/ y raw/palacio/ NO van en el entregable: se descargan
+│   # del Drive y se ubican aquí (ver sección Dataset).
 ├── notebooks/             # calibración, reconstrucción y optimización/medición
 ├── src/                   # código fuente del pipeline (ver abajo)
 ├── report/                # informe (LaTeX + PDF)
@@ -60,7 +62,26 @@ con las extensiones Python y Jupyter y seleccionar el intérprete de `.venv`.
 No instalar `opencv-python` junto a `opencv-contrib-python`, que ya incluye los
 módulos principales y ArUco.
 
+## Dataset
+
+El dataset propio de imágenes se distribuye por **Google Drive** por su tamaño
+(~87 MB) y **no está incluido** en este entregable:
+
+- **[Descargar dataset (Google Drive)](https://drive.google.com/drive/folders/12rf3tCLWvMRrGbgWVxk7QTSbeLpmx9QJ?usp=sharing)**
+
+La carpeta contiene dos subcarpetas. Para ejecutar los notebooks, descargalas y
+ubicalas dentro del proyecto así:
+
+- `calibration/` → `data/calibration/` (63 pares del tablero de calibración)
+- `raw/palacio/` → `data/raw/palacio/` (72 pares estéreo del objeto)
+
+Una vez colocadas, la estructura de `data/` queda completa y los notebooks
+corren sin cambios.
+
 ## Uso
+
+> **Antes de ejecutar:** descargar el dataset del [Drive](#dataset) y ubicarlo en
+> `data/calibration/` y `data/raw/palacio/` como se indica arriba.
 
 La calibración se realiza en
 [`notebooks/01_calibration.ipynb`](notebooks/01_calibration.ipynb), a partir de los
