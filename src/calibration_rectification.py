@@ -533,7 +533,7 @@ def save_calibration_results(
         },
         "metric_scale": {
             "length_unit": "mm based on square_size_mm",
-            "physical_square_size_confirmed": True,
+            "physical_square_size_confirmed": False,
             "baseline_in_calibration_units": float(np.linalg.norm(t)),
             "note": "Confirm the printed board square size is 28 mm and validate a known distance before measuring the object.",
         },
